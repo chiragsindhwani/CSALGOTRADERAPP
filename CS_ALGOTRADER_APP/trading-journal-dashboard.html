@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MaxAlgo Trading Journal</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="journal_data.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+      --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+      --green: #3fb950; --red: #f85149; --yellow: #d29922;
+      --blue: #58a6ff; --orange: #ffa657; --accent: #1f6feb;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px; }
+
+    .page-header { display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+    .page-title { font-size: 18px; font-weight: 700; color: var(--blue); }
+    .page-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+    .upload-bar { display: flex; align-items: center; gap: 10px; }
+    .upload-btn {
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      padding: 8px 16px; font-size: 13px; cursor: pointer; font-weight: 600; }
+    .upload-btn:hover { background: #388bfd; }
+    #file-name { font-size: 12px; color: var(--muted); }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+      gap: 12px; margin-bottom: 24px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 16px; }
+    .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+      color: var(--muted); margin-bottom: 5px; }
+    .stat-card .value { font-size: 22px; font-weight: 700; }
+    .stat-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .pos { color: var(--green); } .neg { color: var(--red); } .neu { color: var(--blue); }
+
+    .section-title { font-size: 12px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .8px; margin-bottom: 12px;
+      padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+
+    .chart-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    @media(max-width:900px) { .chart-row,.chart-row-3 { grid-template-columns: 1fr; } }
+    .chart-box { background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px; }
+    .chart-box h3 { font-size: 12px; color: var(--muted); margin-bottom: 12px; font-weight: 500; }
+    .chart-box canvas { max-height: 230px; }
+
+    .filter-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+    .filter-row input, .filter-row select {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 10px; color: var(--text); font-size: 12px; }
+    #row-count { font-size: 12px; color: var(--muted); }
+
+    .table-wrap { background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; overflow: auto; max-height: 420px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead { position: sticky; top: 0; z-index: 1; }
+    th { background: var(--surface2); color: var(--muted); font-weight: 600;
+      text-transform: uppercase; font-size: 10.5px; letter-spacing: .5px;
+      padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10.5px; font-weight: 600; }
+    .badge-win   { background: rgba(63,185,80,.15); color: var(--green); }
+    .badge-loss  { background: rgba(248,81,73,.15);  color: var(--red); }
+    .badge-long  { background: rgba(88,166,255,.15); color: var(--blue); }
+    .badge-short { background: rgba(255,166,87,.15); color: var(--orange); }
+    .badge-tp1   { background: rgba(63,185,80,.12);  color: var(--green); }
+    .badge-tp2   { background: rgba(63,185,80,.20);  color: var(--green); }
+    .badge-tp3   { background: rgba(63,185,80,.30);  color: var(--green); }
+    .badge-stop  { background: rgba(248,81,73,.15);  color: var(--red); }
+    .badge-close { background: rgba(139,148,158,.15);color: var(--muted); }
+
+    .no-data { text-align: center; padding: 80px 24px; }
+    .no-data h3 { font-size: 18px; margin-bottom: 12px; }
+    .no-data p  { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: 12px;
+      padding: 60px 40px; text-align: center; cursor: pointer;
+      transition: border-color .2s, background .2s; margin-top: 20px;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(31,111,235,.06); }
+    .drop-zone .dz-icon { font-size: 48px; margin-bottom: 16px; }
+    .drop-zone h3 { font-size: 16px; margin-bottom: 8px; }
+    .drop-zone p { color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="page-title">&#x1F4D3; MaxAlgo — NinjaTrader Trading Journal</div>
+    <div class="page-sub" id="data-source">No data loaded</div>
+  </div>
+  <div class="upload-bar">
+    <input type="file" id="csv-file" accept=".csv" style="display:none"/>
+    <button class="upload-btn" onclick="document.getElementById('csv-file').click()">&#x1F4C2; Load CSV</button>
+    <span id="file-name">or drop CSV anywhere on page</span>
+  </div>
+</div>
+
+<div id="main-content" style="display:none">
+  <div class="stat-grid" id="stat-cards"></div>
+
+  <p class="section-title">Performance Charts</p>
+  <div class="chart-row">
+    <div class="chart-box"><h3>Cumulative P&amp;L — Equity Curve</h3><canvas id="equityChart"></canvas></div>
+    <div class="chart-box"><h3>Win / Loss Breakdown</h3><canvas id="winLossChart"></canvas></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-box" style="grid-column:1/-1"><h3>Daily P&amp;L — Last 10 Days (most recent on right)</h3><canvas id="dailyChart"></canvas></div>
+  </div>
+
+  <p class="section-title">Trade Log</p>
+  <div class="filter-row">
+    <input id="search" type="text" placeholder="Search date, instrument, exit…" oninput="filterTable()" style="width:220px"/>
+    <select id="filter-instrument" onchange="filterTable()"><option value="">All Instruments</option></select>
+    <select id="filter-pos" onchange="filterTable()">
+      <option value="">All Positions</option>
+      <option value="Long">Long</option>
+      <option value="Short">Short</option>
+    </select>
+    <select id="filter-outcome" onchange="filterTable()">
+      <option value="">All Exits</option>
+      <option value="MA_TP1">MA_TP1</option>
+      <option value="MA_TP2">MA_TP2</option>
+      <option value="MA_TP3">MA_TP3</option>
+      <option value="MA_Stop">MA_Stop</option>
+      <option value="Close">Close</option>
+    </select>
+    <span id="row-count"></span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Instrument</th><th>Pos</th><th>Qty</th>
+          <th>Entry Time</th><th>Exit Time</th>
+          <th>Entry $</th><th>Exit $</th>
+          <th>Entry</th><th>Exit</th>
+          <th>Profit</th><th>Cum P&amp;L</th>
+          <th>MAE</th><th>MFE</th>
+        </tr>
+      </thead>
+      <tbody id="trade-tbody"></tbody>
+    </table>
+  </div>
+  <p id="generated-label" style="font-size:11px;color:var(--muted);margin-top:8px;"></p>
+</div>
+
+<div id="no-data-section">
+  <div class="drop-zone" id="drop-zone">
+    <div class="dz-icon">&#x1F4C4;</div>
+    <h3>Drop your NinjaTrader CSV here</h3>
+    <p>Or click <strong>Load CSV</strong> above to browse</p>
+    <p style="margin-top:8px;">Expects NinjaTrader Grid export format</p>
+  </div>
+</div>
+
+<script>
+// ── helpers ──────────────────────────────────────────────────────────────────
+const parsePnl = s => {
+  if (!s) return 0;
+  s = s.toString().replace(/\$|,/g, '').trim();
+  if (s.startsWith('(') && s.endsWith(')')) return -parseFloat(s.slice(1,-1)) || 0;
+  return parseFloat(s) || 0;
+};
+const fmtD  = v => v >= 0 ? `+$${Math.abs(v).toFixed(2)}` : `-$${Math.abs(v).toFixed(2)}`;
+const fmtP  = v => v >= 0 ? `$${v.toFixed(2)}` : `($${Math.abs(v).toFixed(2)})`;
+const cls   = v => v > 0 ? 'pos' : v < 0 ? 'neg' : 'neu';
+
+function exitBadge(name) {
+  const map = { MA_TP1:'badge-tp1', MA_TP2:'badge-tp2', MA_TP3:'badge-tp3',
+                MA_Stop:'badge-stop', Close:'badge-close' };
+  return `<span class="badge ${map[name]||'badge-close'}">${name||'–'}</span>`;
+}
+function posBadge(p) {
+  return `<span class="badge ${p==='Long'?'badge-long':'badge-short'}">${p}</span>`;
+}
+
+// ── CSV parser ────────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  const headers = lines[0].split(',').map(h => h.trim());
+  const idx = k => headers.indexOf(k);
+
+  const iNum  = idx('Trade number'), iInst = idx('Instrument');
+  const iPos  = idx('Market pos.'),  iQty  = idx('Qty');
+  const iEP   = idx('Entry price'),  iXP   = idx('Exit price');
+  const iET   = idx('Entry time'),   iXT   = idx('Exit time');
+  const iEN   = idx('Entry name'),   iXN   = idx('Exit name');
+  const iPnl  = idx('Profit'),       iCum  = idx('Cum. net profit');
+  const iMAE  = idx('MAE'),          iMFE  = idx('MFE');
+
+  return lines.slice(1).map(line => {
+    const cols = line.split(',');
+    return {
+      num: parseInt(cols[iNum]) || 0,
+      instrument: (cols[iInst]||'').trim(),
+      pos: (cols[iPos]||'').trim(),
+      qty: parseInt(cols[iQty]) || 1,
+      entryPrice: parseFloat(cols[iEP]) || 0,
+      exitPrice: parseFloat(cols[iXP]) || 0,
+      entryTime: (cols[iET]||'').trim(),
+      exitTime: (cols[iXT]||'').trim(),
+      entryName: (cols[iEN]||'').trim(),
+      exitName: (cols[iXN]||'').trim(),
+      profit: parsePnl(cols[iPnl]),
+      cumPnl: parsePnl(cols[iCum]),
+      mae: parsePnl(cols[iMAE]),
+      mfe: parsePnl(cols[iMFE]),
+    };
+  }).filter(r => r.num > 0);
+}
+
+// ── charts registry (for destroy on reload) ──────────────────────────────────
+const charts = {};
+function makeChart(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), cfg);
+}
+
+// ── main render ───────────────────────────────────────────────────────────────
+let allTrades = [];
+
+function render(trades, source) {
+  allTrades = trades;
+  document.getElementById('no-data-section').style.display = 'none';
+  document.getElementById('main-content').style.display = 'block';
+  document.getElementById('data-source').textContent = source;
+
+  const wins   = trades.filter(t => t.profit > 0);
+  const losses = trades.filter(t => t.profit < 0);
+  const beven  = trades.filter(t => t.profit === 0);
+  const totalPnl   = trades.reduce((s,t) => s + t.profit, 0);
+  const avgWin     = wins.length   ? wins.reduce((s,t)=>s+t.profit,0)/wins.length   : 0;
+  const avgLoss    = losses.length ? losses.reduce((s,t)=>s+t.profit,0)/losses.length : 0;
+  const grossWins  = wins.reduce((s,t)=>s+t.profit,0);
+  const grossLoss  = Math.abs(losses.reduce((s,t)=>s+t.profit,0));
+  const pf         = grossLoss > 0 ? grossWins/grossLoss : Infinity;
+  const winRate    = trades.length ? (wins.length/trades.length*100) : 0;
+  const bestTrade  = trades.length ? Math.max(...trades.map(t=>t.profit)) : 0;
+  const worstTrade = trades.length ? Math.min(...trades.map(t=>t.profit)) : 0;
+  const instruments= [...new Set(trades.map(t=>t.instrument))];
+
+  // stat cards
+  const cards = [
+    { label:'Total P&L',     val: fmtP(totalPnl),          c: cls(totalPnl),  sub: `${trades.length} trades` },
+    { label:'Win Rate',      val: `${winRate.toFixed(1)}%`, c: winRate>=50?'pos':'neg', sub: `${wins.length}W / ${losses.length}L / ${beven.length}BE` },
+    { label:'Profit Factor', val: isFinite(pf)?`${pf.toFixed(2)}x`:'∞',        c: pf>=1.5?'pos':'neg', sub: 'Gross wins / losses' },
+    { label:'Avg Win',       val: `$${avgWin.toFixed(2)}`,  c: 'pos',          sub: `${wins.length} winning trades` },
+    { label:'Avg Loss',      val: fmtP(avgLoss),            c: 'neg',          sub: `${losses.length} losing trades` },
+    { label:'Best Trade',    val: `$${bestTrade.toFixed(2)}`,c:'pos',          sub: 'Single trade' },
+    { label:'Worst Trade',   val: fmtP(worstTrade),         c: 'neg',          sub: 'Single trade' },
+    { label:'Instruments',   val: instruments.length,        c: 'neu',          sub: instruments.join(', ') },
+  ];
+  const grid = document.getElementById('stat-cards');
+  grid.innerHTML = '';
+  cards.forEach(c => {
+    grid.innerHTML += `<div class="stat-card">
+      <div class="label">${c.label}</div>
+      <div class="value ${c.c}">${c.val}</div>
+      <div class="sub">${c.sub}</div>
+    </div>`;
+  });
+
+  // populate instrument filter
+  const sel = document.getElementById('filter-instrument');
+  sel.innerHTML = '<option value="">All Instruments</option>';
+  instruments.forEach(i => sel.innerHTML += `<option value="${i}">${i}</option>`);
+
+  // equity curve
+  const cum = trades.map(t => t.cumPnl);
+  const last = cum[cum.length-1] || 0;
+  makeChart('equityChart', {
+    type: 'line',
+    data: {
+      labels: trades.map(t => `#${t.num}`),
+      datasets: [{ data: cum,
+        borderColor: last>=0?'#3fb950':'#f85149',
+        backgroundColor: last>=0?'rgba(63,185,80,0.08)':'rgba(248,81,73,0.08)',
+        fill:true, tension:0.3, pointRadius:0, borderWidth:2 }]
+    },
+    options: { responsive:true, maintainAspectRatio:true,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ticks:{color:'#8b949e',maxTicksLimit:10},grid:{color:'#21262d'}},
+        y:{ticks:{color:'#8b949e',callback:v=>'$'+v},grid:{color:'#21262d'}},
+      }
+    }
+  });
+
+  // win/loss doughnut
+  makeChart('winLossChart', {
+    type: 'doughnut',
+    data: {
+      labels: ['Wins','Losses','Breakeven'],
+      datasets: [{ data:[wins.length, losses.length, beven.length],
+        backgroundColor:['#3fb950','#f85149','#8b949e'],
+        borderWidth:2, borderColor:'#161b22' }]
+    },
+    options: { responsive:true, maintainAspectRatio:true,
+      plugins:{legend:{position:'right',labels:{color:'#e6edf3',font:{size:12}}}} }
+  });
+
+  // daily P&L
+  const byDay = {};
+  trades.forEach(t => {
+    const d = t.entryTime.split(' ')[0];
+    byDay[d] = (byDay[d]||0) + t.profit;
+  });
+  const days = Object.keys(byDay).sort().slice(-10);
+  makeChart('dailyChart', {
+    type: 'bar',
+    data: {
+      labels: days,
+      datasets: [{ data: days.map(d=>byDay[d]),
+        backgroundColor: days.map(d=>byDay[d]>=0?'rgba(63,185,80,0.6)':'rgba(248,81,73,0.6)'),
+        borderRadius:3 }]
+    },
+    options: { responsive:true, maintainAspectRatio:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8b949e',maxRotation:45},grid:{color:'#21262d'}},
+        y:{ticks:{color:'#8b949e',callback:v=>'$'+v},grid:{color:'#21262d'}},
+      }
+    }
+  });
+
+  renderTable(allTrades);
+}
+
+function renderTable(trades) {
+  const tbody = document.getElementById('trade-tbody');
+  tbody.innerHTML = '';
+  trades = [...trades].sort((a, b) => new Date(b.entryTime) - new Date(a.entryTime));
+  trades.forEach(t => {
+    tbody.innerHTML += `<tr>
+      <td>${t.num}</td>
+      <td>${t.instrument}</td>
+      <td>${posBadge(t.pos)}</td>
+      <td>${t.qty}</td>
+      <td>${t.entryTime}</td>
+      <td>${t.exitTime}</td>
+      <td>${t.entryPrice}</td>
+      <td>${t.exitPrice}</td>
+      <td><span style="font-size:11px;color:var(--muted)">${t.entryName}</span></td>
+      <td>${exitBadge(t.exitName)}</td>
+      <td class="${cls(t.profit)}" style="font-weight:600">${fmtP(t.profit)}</td>
+      <td class="${cls(t.cumPnl)}">${fmtP(t.cumPnl)}</td>
+      <td style="color:var(--red)">${t.mae?fmtP(-Math.abs(t.mae)):'–'}</td>
+      <td style="color:var(--green)">${t.mfe?'$'+t.mfe.toFixed(2):'–'}</td>
+    </tr>`;
+  });
+  document.getElementById('row-count').textContent = `${trades.length} trades`;
+}
+
+function filterTable() {
+  const q    = document.getElementById('search').value.toLowerCase();
+  const inst = document.getElementById('filter-instrument').value;
+  const pos  = document.getElementById('filter-pos').value;
+  const exit = document.getElementById('filter-outcome').value;
+  renderTable(allTrades.filter(t =>
+    (!q    || t.instrument.toLowerCase().includes(q) || t.entryTime.includes(q) || t.exitName.toLowerCase().includes(q)) &&
+    (!inst || t.instrument === inst) &&
+    (!pos  || t.pos === pos) &&
+    (!exit || t.exitName === exit)
+  ));
+}
+
+// ── file input ────────────────────────────────────────────────────────────────
+document.getElementById('csv-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('file-name').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const trades = parseCSV(ev.target.result);
+    render(trades, `Loaded: ${file.name}  (${trades.length} trades)`);
+    document.getElementById('generated-label').textContent = `File: ${file.name}`;
+  };
+  reader.readAsText(file);
+});
+
+// ── drag & drop ───────────────────────────────────────────────────────────────
+const dz = document.getElementById('drop-zone');
+['dragenter','dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag-over'); }));
+['dragleave','drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag-over'); }));
+document.addEventListener('drop', e => {
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.name.endsWith('.csv')) return;
+  document.getElementById('file-name').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => render(parseCSV(ev.target.result), `Loaded: ${file.name}`);
+  reader.readAsText(file);
+});
+
+// ── auto-load from journal_data.js ───────────────────────────────────────────
+if (window.JOURNAL_DATA) {
+  render(window.JOURNAL_DATA.trades, `Auto-loaded: ${window.JOURNAL_DATA.source} (${window.JOURNAL_DATA.trades.length} trades)`);
+  document.getElementById('generated-label').textContent = `Generated: ${window.JOURNAL_DATA.generated_at}`;
+}
+</script>
+</body>
+</html>

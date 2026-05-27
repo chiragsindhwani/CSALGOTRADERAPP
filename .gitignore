@@ -1,0 +1,50 @@
+# ── Secrets & credentials ────────────────────────────────────────────────────
+.env
+*.env.*
+secrets.json
+
+# ── Generated data files (rebuilt by generate_*.py scripts) ─────────────────
+CS_ALGOTRADER_APP/tradier_account_data.js
+CS_ALGOTRADER_APP/backtest_data.js
+CS_ALGOTRADER_APP/forward_test_data.js
+CS_ALGOTRADER_APP/journal_data.js
+
+# ── Session & operational logs ───────────────────────────────────────────────
+logs/
+iron_condor_session.log
+scheduler_errors.log
+*.log
+
+# ── PDT & runtime state (machine-local) ──────────────────────────────────────
+pdt_trades.json
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+MyTradingJournal/.venv/
+MySpyTrade0DTE/.venv/
+
+# ── IDE & OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Claude Code internal ──────────────────────────────────────────────────────
+.claude/

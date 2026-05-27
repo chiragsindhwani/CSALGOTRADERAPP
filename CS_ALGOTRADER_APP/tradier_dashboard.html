@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tradier Account Dashboard</title>
+  <script src="tradier_account_data.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #21262d;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --green:     #3fb950;
+      --red:       #f85149;
+      --yellow:    #d29922;
+      --blue:      #58a6ff;
+      --orange:    #ffa657;
+      --tgreen:    #00c16c;
+      --tgreen2:   #00994f;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 2px solid var(--tgreen);
+      padding: 0 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px; position: sticky; top: 0; z-index: 50;
+    }
+    .hdr-left  { display: flex; align-items: center; gap: 18px; }
+    .tradier-logo { display: flex; align-items: center; gap: 10px; }
+    .tradier-logo svg { width: 36px; height: 36px; }
+    .tradier-logo-text { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: #fff; }
+    .tradier-logo-text span { color: var(--tgreen); }
+    .hdr-sub { font-size: 12px; color: var(--muted); border-left: 1px solid var(--border); padding-left: 18px; line-height: 1.5; }
+    .hdr-right { display: flex; align-items: center; gap: 12px; }
+    .env-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+    .env-live  { background: rgba(0,193,108,.15); color: var(--tgreen); border: 1px solid rgba(0,193,108,.4); }
+    .env-sand  { background: rgba(210,153,34,.15); color: var(--yellow); border: 1px solid rgba(210,153,34,.4); }
+
+    /* Countdown pill in header */
+    .countdown-pill {
+      display: flex; align-items: center; gap: 6px;
+      border: 1px solid var(--tgreen); border-radius: 20px;
+      padding: 4px 12px; font-size: 12px; font-weight: 700;
+      color: var(--tgreen); transition: color .3s, border-color .3s;
+      font-family: "Courier New", monospace;
+    }
+    .countdown-pill .cd-icon { font-size: 10px; }
+    .countdown-pill.warn  { color: var(--yellow); border-color: var(--yellow); }
+    .countdown-pill.danger{ color: var(--red);    border-color: var(--red); }
+
+    .refresh-now-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--tgreen2); color: #fff; border: none;
+      padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: opacity .15s;
+    }
+    .refresh-now-btn:hover { opacity: .82; }
+    .refresh-now-btn:disabled { opacity: .45; cursor: default; }
+    .last-updated { font-size: 11px; color: var(--muted); }
+
+
+    /* ── Main layout ─────────────────────────────────────────────────────────── */
+    .panel-wrap { padding: 28px 28px 48px; max-width: 1400px; margin: 0 auto; }
+
+    /* ── Section title ───────────────────────────────────────────────────────── */
+    .section-title {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 14px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .section-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tgreen); flex-shrink: 0; }
+
+    /* ── Top row ─────────────────────────────────────────────────────────────── */
+    .top-row { display: grid; grid-template-columns: 320px 1fr; gap: 20px; margin-bottom: 28px; }
+    @media (max-width: 900px) { .top-row { grid-template-columns: 1fr; } }
+
+    .account-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-top: 3px solid var(--tgreen); border-radius: 10px; padding: 22px;
+    }
+    .account-card .ac-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+    .ac-avatar {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--tgreen), #005c33);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .ac-name { font-size: 16px; font-weight: 700; }
+    .ac-id   { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: "Courier New", monospace; }
+    .ac-row  {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+    }
+    .ac-row:last-child { border-bottom: none; }
+    .ac-row .ak { color: var(--muted); }
+    .ac-row .av { font-weight: 600; }
+    .av-active { color: var(--tgreen); }
+    .av-margin { color: var(--blue); }
+    .av-level  { color: var(--orange); }
+
+    /* ── Stat grid ───────────────────────────────────────────────────────────── */
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 14px; align-content: start;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px 18px; position: relative; overflow: hidden;
+    }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--border);
+    }
+    .stat-card.c-green::before  { background: var(--tgreen); }
+    .stat-card.c-blue::before   { background: var(--blue); }
+    .stat-card.c-orange::before { background: var(--orange); }
+    .stat-card.c-red::before    { background: var(--red); }
+    .stat-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin-bottom: 8px; }
+    .stat-card .value { font-size: 22px; font-weight: 700; }
+    .stat-card .sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .pos { color: var(--tgreen); }
+    .neg { color: var(--red); }
+
+    /* ── PDT Tracker ─────────────────────────────────────────────────────────── */
+    .pdt-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 22px 24px; margin-bottom: 28px;
+    }
+    .pdt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .pdt-title  { font-size: 14px; font-weight: 700; }
+    .pdt-rule   { font-size: 12px; color: var(--muted); }
+    .pdt-body   { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .pdt-days   { display: flex; gap: 10px; }
+    .pdt-day    { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .pdt-dot    {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; border: 2px solid;
+    }
+    .pdt-dot.traded    { background: rgba(0,193,108,.2); border-color: var(--tgreen); color: var(--tgreen); }
+    .pdt-dot.available { background: var(--surface2); border-color: var(--border); color: var(--muted); }
+    .pdt-dot.today     { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(88,166,255,.2); }
+    .pdt-day .day-lbl  { font-size: 10px; color: var(--muted); }
+    .pdt-meter { flex: 1; min-width: 200px; }
+    .pdt-bar-bg {
+      height: 8px; background: var(--surface2); border-radius: 4px;
+      border: 1px solid var(--border); overflow: hidden; margin-bottom: 8px;
+    }
+    .pdt-bar-fill { height: 100%; border-radius: 4px; transition: width .4s; background: var(--tgreen); }
+    .pdt-bar-fill.warn   { background: var(--yellow); }
+    .pdt-bar-fill.danger { background: var(--red); }
+    .pdt-meta { display: flex; justify-content: space-between; font-size: 12px; }
+    .pdt-count { font-weight: 700; font-size: 20px; }
+
+    /* ── Tables ──────────────────────────────────────────────────────────────── */
+    .table-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; margin-bottom: 24px;
+    }
+    .table-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .table-card-header h3 { font-size: 13px; font-weight: 700; }
+    .tcount { font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 2px 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    thead { position: sticky; top: 0; z-index: 1; }
+    th {
+      background: var(--surface2); color: var(--muted); font-weight: 600;
+      text-transform: uppercase; font-size: 10.5px; letter-spacing: .5px;
+      padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    td { padding: 9px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 10.5px; font-weight: 700; letter-spacing: .3px; }
+    .badge-filled   { background: rgba(0,193,108,.15);  color: var(--tgreen); }
+    .badge-open     { background: rgba(88,166,255,.15); color: var(--blue); }
+    .badge-canceled { background: rgba(139,148,158,.15);color: var(--muted); }
+    .badge-rejected { background: rgba(248,81,73,.15);  color: var(--red); }
+    .badge-condor   { background: rgba(255,166,87,.15); color: var(--orange); }
+    .badge-option   { background: rgba(88,166,255,.12); color: var(--blue); }
+    .badge-equity   { background: rgba(63,185,80,.12);  color: var(--green); }
+    .badge-long     { background: rgba(0,193,108,.1);   color: var(--tgreen); }
+    .badge-short    { background: rgba(248,81,73,.1);   color: var(--red); }
+    .badge-success  { background: rgba(0,193,108,.15);  color: var(--tgreen); }
+    .badge-error    { background: rgba(248,81,73,.15);  color: var(--red); }
+    .mono { font-family: "Courier New", monospace; font-size: 12px; color: var(--blue); }
+    .empty { text-align: center; padding: 36px; color: var(--muted); font-size: 13px; }
+
+
+    /* ── P&L Chart ──────────────────────────────────────────────────────────── */
+    .pnl-chart-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; margin-bottom: 28px;
+    }
+    .pnl-chart-hdr {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      background: var(--surface2); flex-wrap: wrap; gap: 10px;
+    }
+    .pnl-chart-hdr h3 { font-size: 13px; font-weight: 700; }
+    .pnl-legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+    .legend-dot  { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+    .pnl-canvas-wrap { padding: 4px 0 0; position: relative; }
+    #pnl-canvas { display: block; width: 100%; cursor: crosshair; }
+    .pnl-tooltip {
+      position: absolute; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px; font-size: 12px; line-height: 1.6;
+      pointer-events: none; z-index: 20; opacity: 0; transition: opacity .12s;
+      min-width: 170px; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    }
+    .pnl-summary-row {
+      display: flex; border-top: 1px solid var(--border);
+    }
+    .pnl-sum-item {
+      flex: 1; padding: 12px 10px; border-right: 1px solid var(--border); text-align: center;
+    }
+    .pnl-sum-item:last-child { border-right: none; }
+    .pnl-sum-label { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 4px; }
+    .pnl-sum-value { font-size: 17px; font-weight: 700; }
+    @media (max-width: 700px) { .pnl-sum-item { padding: 10px 6px; } .pnl-sum-value { font-size: 14px; } }
+
+    /* ── Footer ──────────────────────────────────────────────────────────────── */
+    .footer {
+      text-align: center; padding: 20px; font-size: 11px; color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ HEADER ════════════════════════════════════════════════════════════════ -->
+<header>
+  <div class="hdr-left">
+    <div class="tradier-logo">
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="40" height="40" rx="8" fill="#00C16C"/>
+        <path d="M8 11h24v5H24v13h-8V16H8v-5z" fill="white"/>
+      </svg>
+      <span class="tradier-logo-text">tradier<span>.</span></span>
+    </div>
+    <div class="hdr-sub">
+      SPY Iron Condor &mdash; Account Dashboard<br>
+      <span id="hdr-account">Loading&hellip;</span>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <span id="env-badge" class="env-badge env-live">LIVE</span>
+    <div class="last-updated">Updated: <span id="last-updated-ts">&mdash;</span></div>
+    <!-- Countdown pill -->
+    <div class="countdown-pill" id="countdown-pill">
+      <span class="cd-icon">&#x23F1;</span>
+      <span id="pill-text">1:00</span>
+    </div>
+    <button class="refresh-now-btn" id="hdr-refresh-btn" onclick="manualRefresh()">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+        <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+      </svg>
+      Refresh Now
+    </button>
+  </div>
+</header>
+
+<!-- ══ MAIN ═══════════════════════════════════════════════════════════════════ -->
+<div class="panel-wrap">
+
+  <!-- Account + Stats -->
+  <div class="top-row">
+    <div class="account-card">
+      <div class="ac-header">
+        <div class="ac-avatar" id="ac-avatar">RD</div>
+        <div>
+          <div class="ac-name" id="ac-name">&mdash;</div>
+          <div class="ac-id"  id="ac-id">&mdash;</div>
+        </div>
+      </div>
+      <div class="ac-row"><span class="ak">Account Type</span><span class="av av-margin" id="ac-type">&mdash;</span></div>
+      <div class="ac-row"><span class="ak">Classification</span><span class="av" id="ac-class">&mdash;</span></div>
+      <div class="ac-row"><span class="ak">Options Level</span><span class="av av-level" id="ac-opt-level">&mdash;</span></div>
+      <div class="ac-row"><span class="ak">PDT Flagged</span><span class="av" id="ac-pdt-flag">&mdash;</span></div>
+      <div class="ac-row"><span class="ak">Status</span><span class="av av-active" id="ac-status">&mdash;</span></div>
+      <div class="ac-row"><span class="ak">Member Since</span><span class="av" id="ac-created">&mdash;</span></div>
+      <div class="ac-row"><span class="ak">Pending Orders</span><span class="av" id="ac-pending">&mdash;</span></div>
+    </div>
+    <div class="stat-grid" id="stat-grid"></div>
+  </div>
+
+  <!-- P&L Bar Chart -->
+  <div class="section-title"><span class="dot"></span>Daily P&amp;L &mdash; Live Account (from May 26, 2026)</div>
+  <div class="pnl-chart-card">
+    <div class="pnl-chart-hdr">
+      <div>
+        <h3>P&amp;L &amp; Commission Breakdown</h3>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">
+          Live Tradier gainloss &bull; SPY iron condors only &bull;
+          <span style="color:var(--tgreen)">&#9632;</span> Net P&amp;L +
+          <span style="color:var(--orange)">&#9632;</span> Commission = Gross Credit
+        </div>
+      </div>
+      <div class="pnl-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:var(--tgreen)"></span>Net P&amp;L</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span>Commission</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--red)"></span>Loss Day</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--border)"></span>No Trade</span>
+      </div>
+    </div>
+    <div class="pnl-canvas-wrap" id="pnl-canvas-wrap">
+      <canvas id="pnl-canvas" height="240"></canvas>
+      <div class="pnl-tooltip" id="pnl-tooltip"></div>
+    </div>
+    <div class="pnl-summary-row" id="pnl-summary-row"></div>
+  </div>
+
+  <!-- PDT Tracker -->
+  <div class="pdt-panel">
+    <div class="pdt-header">
+      <div>
+        <div class="pdt-title">Pattern Day Trader (PDT) Tracker</div>
+        <div class="pdt-rule">Max 3 day-trade round-trips per rolling 5-business-day window &bull; Account equity &lt; $25,000</div>
+      </div>
+      <div style="text-align:right">
+        <div class="pdt-count"><span id="pdt-used">0</span><span style="color:var(--muted);font-size:14px;font-weight:500">/3</span></div>
+        <div style="font-size:11px;color:var(--muted)">trades used</div>
+      </div>
+    </div>
+    <div class="pdt-body">
+      <div class="pdt-days" id="pdt-days"></div>
+      <div class="pdt-meter">
+        <div class="pdt-bar-bg"><div class="pdt-bar-fill" id="pdt-bar" style="width:0%"></div></div>
+        <div class="pdt-meta">
+          <span style="color:var(--muted)">0 trades</span>
+          <span id="pdt-remaining" style="color:var(--tgreen);font-weight:600"></span>
+          <span style="color:var(--muted)">3 trades</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPY Positions -->
+  <div class="section-title"><span class="dot"></span>SPY Open Positions</div>
+  <div class="table-card">
+    <div class="table-card-header">
+      <h3>SPY Option Holdings</h3>
+      <span class="tcount" id="pos-count">0 positions</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th><th>Type</th><th>Side</th><th>Qty</th>
+            <th>Cost Basis</th><th>Cost / Share</th><th>Date Acquired</th>
+          </tr>
+        </thead>
+        <tbody id="pos-tbody"><tr><td colspan="7" class="empty">Loading&hellip;</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SPY Orders -->
+  <div class="section-title"><span class="dot"></span>SPY Orders</div>
+  <div class="table-card">
+    <div class="table-card-header">
+      <h3>SPY Iron Condor Order History</h3>
+      <span class="tcount" id="ord-count">0 orders</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Order ID</th><th>Date / Time</th><th>Symbol</th><th>Strategy</th>
+            <th>Type</th><th>Legs</th><th>Qty</th><th>Avg Fill</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="ord-tbody"><tr><td colspan="9" class="empty">Loading&hellip;</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /panel-wrap -->
+
+<!-- ══ FOOTER ════════════════════════════════════════════════════════════════ -->
+<div class="footer">
+  Tradier Brokerage &bull; Account <span id="footer-acct">&mdash;</span> &bull;
+  Data refreshed: <span id="footer-ts">&mdash;</span> &bull;
+  CS AlgoTrader &mdash; SPY Iron Condor 0DTE
+</div>
+
+<script>
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt  = (n, d=2) => n == null ? '&mdash;' : Number(n).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+const cap  = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '&mdash;';
+const dtFmt = iso => {
+  if (!iso) return '&mdash;';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+    + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+};
+const dtShort = iso => iso ? new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '&mdash;';
+
+// ── Auto-refresh engine ───────────────────────────────────────────────────────
+const INTERVAL = 300;      // 5 minutes
+let countdown    = INTERVAL;
+let cdTimer      = null;
+let isRefreshing = false;
+
+function startCountdown() {
+  if (cdTimer) clearInterval(cdTimer);
+  countdown = INTERVAL;
+  cdTimer = setInterval(tick, 1000);
+  updateCountdownUI();
+}
+
+function tick() {
+  if (!isRefreshing) {
+    countdown = Math.max(0, countdown - 1);
+    updateCountdownUI();
+    if (countdown === 0) doRefresh();
+  }
+}
+
+function updateCountdownUI() {
+  const s    = countdown;
+  const mm   = String(Math.floor(s / 60));
+  const ss   = String(s % 60).padStart(2, '0');
+  const pill = $('countdown-pill');
+  $('pill-text').textContent = `${mm}:${ss}`;
+  pill.className = 'countdown-pill' + (s <= 30 ? ' danger' : s <= 60 ? ' warn' : '');
+}
+
+async function doRefresh() {
+  if (isRefreshing) return;
+  isRefreshing = true;
+  countdown    = INTERVAL;   // reset immediately to avoid double-fire
+
+  const hdrBtn = $('hdr-refresh-btn');
+  if (hdrBtn) hdrBtn.disabled = true;
+
+  try {
+    const resp  = await fetch('tradier_account_data.js?bust=' + Date.now(), { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text  = await resp.text();
+    const match = text.match(/window\.TRADIER_DATA\s*=\s*(\{[\s\S]*\});/);
+    if (!match) throw new Error('Parse error in data file');
+    window.TRADIER_DATA = JSON.parse(match[1]);
+    render(window.TRADIER_DATA);
+  } catch (e) {
+    console.warn('Auto-refresh failed:', e.message);
+  }
+
+  isRefreshing = false;
+  if (hdrBtn) hdrBtn.disabled = false;
+  updateCountdownUI();
+}
+
+function manualRefresh() {
+  countdown = 0;  // next tick triggers doRefresh immediately
+}
+
+
+// ── P&L Bar Chart ─────────────────────────────────────────────────────────────
+function renderPnlChart(D) {
+  const days  = D.pnl_chart || [];
+  const wrap  = document.getElementById('pnl-canvas-wrap');
+  const canvas= document.getElementById('pnl-canvas');
+  const tipEl = document.getElementById('pnl-tooltip');
+  const sumRow= document.getElementById('pnl-summary-row');
+  if (!canvas || !wrap) return;
+
+  // ── Summary stats ─────────────────────────────────────────────────────────
+  const tradeDays  = days.filter(d => d.gross_pnl > 0);
+  const totalGross = tradeDays.reduce((s, d) => s + d.gross_pnl, 0);
+  const totalComm  = tradeDays.reduce((s, d) => s + d.commission, 0);
+  const totalNet   = tradeDays.reduce((s, d) => s + d.net_pnl, 0);
+  const winDays    = tradeDays.filter(d => d.net_pnl > 0).length;
+  const avgNet     = tradeDays.length ? totalNet / tradeDays.length : 0;
+  if (sumRow) sumRow.innerHTML = [
+    { label: 'Gross P&L (7d)',  value: `$${fmt(totalGross)}`,                          cls: 'pos' },
+    { label: 'Commission (7d)', value: `-$${fmt(totalComm)}`,                           cls: 'neg' },
+    { label: 'Net P&L (7d)',    value: `${totalNet>=0?'+':''}$${fmt(totalNet)}`,         cls: totalNet>=0?'pos':'neg' },
+    { label: 'Win Rate',        value: `${tradeDays.length?Math.round(winDays/tradeDays.length*100):0}%`, cls: '' },
+    { label: 'Avg Daily Net',   value: `${avgNet>=0?'+':''}$${fmt(avgNet)}`,             cls: avgNet>=0?'pos':'neg' },
+  ].map(s => `<div class="pnl-sum-item"><div class="pnl-sum-label">${s.label}</div><div class="pnl-sum-value ${s.cls}">${s.value}</div></div>`).join('');
+
+  // ── Canvas setup (retina-aware) ───────────────────────────────────────────
+  const dpr  = window.devicePixelRatio || 1;
+  const cssW = wrap.clientWidth || 800;
+  const cssH = 240;
+  canvas.style.width  = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  canvas.width  = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const pad  = { top: 32, right: 22, bottom: 62, left: 72 };
+  const cW   = cssW - pad.left - pad.right;
+  const cH   = cssH - pad.top  - pad.bottom;
+
+  // ── Y scale ───────────────────────────────────────────────────────────────
+  const maxGross = Math.max(...days.map(d => d.gross_pnl || 0), 100);
+  const yMax = Math.ceil((maxGross + 30) / 50) * 50;
+  const toY  = v => pad.top + cH - (v / yMax) * cH;
+
+  // ── Grid + Y labels ───────────────────────────────────────────────────────
+  const gridN = 5;
+  ctx.font = `11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  for (let i = 0; i <= gridN; i++) {
+    const val = yMax / gridN * i;
+    const y   = toY(val);
+    ctx.strokeStyle = '#30363d';
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cW, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle  = '#8b949e';
+    ctx.textAlign  = 'right';
+    ctx.fillText('$' + Math.round(val), pad.left - 8, y + 4);
+  }
+
+  // ── Bars ─────────────────────────────────────────────────────────────────
+  const n      = days.length;
+  const slotW  = cW / n;
+  const barW   = Math.min(Math.max(slotW * 0.58, 18), 72);
+  const hitAreas = [];   // [{i, x, day}] for hover detection
+
+  days.forEach((day, i) => {
+    const bx = pad.left + i * slotW + (slotW - barW) / 2;
+    const y0 = toY(0);
+    const xc = bx + barW / 2;
+
+    if (day.gross_pnl > 0) {
+      const net  = day.net_pnl;
+      const comm = day.commission;
+
+      if (net >= 0) {
+        // Green bar (net P&L)
+        const netH  = Math.max((net  / yMax) * cH, 1);
+        const commH = Math.max((comm / yMax) * cH, 1);
+        ctx.fillStyle = '#00c16c';
+        ctx.fillRect(bx, y0 - netH, barW, netH);
+        // Orange cap (commission)
+        ctx.fillStyle = '#ffa657';
+        ctx.fillRect(bx, y0 - netH - commH, barW, commH);
+        // Thin top highlight on commission cap
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(bx, y0 - netH - commH, barW, 2);
+        // Dollar label above bar
+        ctx.fillStyle = '#e6edf3';
+        ctx.font = `bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('$' + Math.round(day.gross_pnl), xc, toY(day.gross_pnl) - 7);
+      } else {
+        // Red bar (loss day, going down)
+        const lossH = Math.max((Math.abs(net) / yMax) * cH, 1);
+        ctx.fillStyle = '#f85149';
+        ctx.fillRect(bx, y0, barW, lossH);
+        ctx.fillStyle = '#e6edf3';
+        ctx.font = `bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('-$' + Math.round(Math.abs(net)), xc, y0 + lossH + 14);
+      }
+      hitAreas.push({ bx, barW, day });
+    } else {
+      // No-trade placeholder — dashed dash at zero line
+      const isToday = (day.date === new Date().toISOString().slice(0,10));
+      ctx.strokeStyle = isToday ? '#58a6ff55' : '#30363d';
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(bx, y0); ctx.lineTo(bx + barW, y0); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle  = isToday ? '#58a6ff99' : '#484f58';
+      ctx.font       = `9px -apple-system, sans-serif`;
+      ctx.textAlign  = 'center';
+      ctx.fillText(isToday ? 'awaiting' : 'no trade', xc, y0 - 6);
+    }
+
+    // X-axis labels
+    const date = new Date(day.date + 'T12:00:00');
+    const DOWS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    ctx.fillStyle = '#8b949e';
+    ctx.font      = `10.5px -apple-system, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(DOWS[date.getDay()], xc, y0 + 16);
+    ctx.fillStyle = '#6e7681';
+    ctx.font      = `10px -apple-system, sans-serif`;
+    ctx.fillText(MONS[date.getMonth()] + ' ' + date.getDate(), xc, y0 + 29);
+  });
+
+  // Zero baseline
+  ctx.strokeStyle = '#484f58';
+  ctx.lineWidth   = 1.5;
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(pad.left, toY(0)); ctx.lineTo(pad.left + cW, toY(0)); ctx.stroke();
+
+  // ── Hover tooltip ─────────────────────────────────────────────────────────
+  const MONTHS_LONG = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DOWS_LONG   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx   = e.clientX - rect.left;
+    const my   = e.clientY - rect.top;
+    const hit  = hitAreas.find(a => mx >= a.bx && mx <= a.bx + a.barW && my >= pad.top && my <= toY(0) + 8);
+    if (hit && tipEl) {
+      const d   = hit.day;
+      const dt  = new Date(d.date + 'T12:00:00');
+      const pnlColor = d.net_pnl >= 0 ? '#00c16c' : '#f85149';
+      tipEl.innerHTML = `
+        <div style="font-weight:700;margin-bottom:7px;color:#e6edf3;border-bottom:1px solid #30363d;padding-bottom:6px">
+          ${DOWS_LONG[dt.getDay()]}, ${MONTHS_LONG[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:18px">
+          <span style="color:#8b949e">Gross Credit</span>
+          <span style="font-weight:600;color:#e6edf3">$${fmt(d.gross_pnl)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:18px">
+          <span style="color:#ffa657">Commission</span>
+          <span style="font-weight:600;color:#ffa657">-$${fmt(d.commission)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:18px;border-top:1px solid #30363d;margin-top:6px;padding-top:6px">
+          <span style="font-weight:700;color:#e6edf3">Net P&amp;L</span>
+          <span style="font-weight:700;color:${pnlColor}">${d.net_pnl>=0?'+':''}$${fmt(d.net_pnl)}</span>
+        </div>
+        ${d.contracts ? `<div style="margin-top:6px;font-size:10px;color:#8b949e">${d.contracts} contracts${d.spreads ? ' &bull; ' + d.spreads : ''}</div>` : ''}
+      `;
+      tipEl.style.opacity = '1';
+      const tipLeft = Math.min(e.offsetX + 14, cssW - 185);
+      const tipTop  = Math.max(e.offsetY - 90, 8);
+      tipEl.style.left = tipLeft + 'px';
+      tipEl.style.top  = tipTop  + 'px';
+    } else if (tipEl) {
+      tipEl.style.opacity = '0';
+    }
+  };
+  canvas.onmouseleave = () => { if (tipEl) tipEl.style.opacity = '0'; };
+}
+
+// ── Render account data ───────────────────────────────────────────────────────
+function optionInfo(symbol) {
+  const m = /^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/.exec(symbol);
+  if (!m) return { type:'equity', label:symbol };
+  const [,und,yy,mm,dd,cp,stk] = m;
+  return { type:'option', und, expiry:`20${yy}-${mm}-${dd}`, strike:parseInt(stk)/1000, cp };
+}
+function strategyBadge(o) {
+  const s = (o.strategy || o.class || '').toLowerCase();
+  if (s === 'condor' || s === 'multileg') return `<span class="badge badge-condor">Iron Condor</span>`;
+  if (s === 'option')  return `<span class="badge badge-option">Option</span>`;
+  return `<span class="badge badge-equity">${cap(s)}</span>`;
+}
+function statusBadge(st) {
+  const s   = (st||'').toLowerCase();
+  const map = { filled:'badge-filled', open:'badge-open', canceled:'badge-canceled', rejected:'badge-rejected', pending:'badge-open', partially_filled:'badge-open' };
+  return `<span class="badge ${map[s]||'badge-option'}">${cap(s.replace(/_/g,' '))}</span>`;
+}
+
+function render(D) {
+  const p   = D.profile;
+  const bal = D.balances;
+  const pdt = D.pdt;
+  const todayISO = new Date().toISOString().slice(0,10);
+
+  // Header / footer
+  const initials = p.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  $('hdr-account').textContent = `${p.name}  ·  ${p.account_number}`;
+  $('env-badge').textContent   = D.environment;
+  $('env-badge').className     = `env-badge ${D.environment === 'LIVE' ? 'env-live' : 'env-sand'}`;
+  const ts    = new Date(D.generated_at);
+  const tsStr = ts.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  $('last-updated-ts').textContent = tsStr;
+  $('footer-acct').textContent     = p.account_number;
+  $('footer-ts').textContent       = tsStr;
+
+  // Account card
+  $('ac-avatar').textContent    = initials;
+  $('ac-name').textContent      = p.name;
+  $('ac-id').textContent        = `Account  ${p.account_number}`;
+  $('ac-type').textContent      = cap(p.type);
+  $('ac-class').textContent     = cap(p.classification);
+  $('ac-opt-level').textContent = `Level ${p.option_level}  (Spreads)`;
+  $('ac-pdt-flag').innerHTML    = p.day_trader
+    ? `<span style="color:var(--red);font-weight:700">YES &mdash; restricted</span>`
+    : `<span style="color:var(--tgreen)">No</span>`;
+  $('ac-status').textContent    = cap(p.status);
+  $('ac-status').style.color    = p.status === 'active' ? 'var(--tgreen)' : 'var(--yellow)';
+  $('ac-created').textContent   = dtShort(p.date_created);
+  $('ac-pending').textContent   = bal.pending_orders_count ?? 0;
+
+  // Stat cards
+  const openCls  = bal.open_pl  >= 0 ? 'pos' : 'neg';
+  const closeCls = bal.close_pl >= 0 ? 'pos' : 'neg';
+  $('stat-grid').innerHTML = [
+    { label:'Total Equity',        value:`$${fmt(bal.total_equity)}`,       sub:'Current portfolio value',   color:'c-green' },
+    { label:'Cash Available',      value:`$${fmt(bal.total_cash)}`,          sub:'Settled funds',             color:'c-blue' },
+    { label:'Open P&L',            value:`<span class="${openCls}">${bal.open_pl>=0?'+':'-'}$${fmt(Math.abs(bal.open_pl))}</span>`,  sub:'Unrealised gain/loss', color:bal.open_pl>=0?'c-green':'c-red' },
+    { label:'Close P&L (Today)',   value:`<span class="${closeCls}">${bal.close_pl>=0?'+':'-'}$${fmt(Math.abs(bal.close_pl))}</span>`, sub:'Realised today',      color:bal.close_pl>=0?'c-green':'c-red' },
+    { label:'Option Buying Power', value:`$${fmt(bal.option_buying_power)}`, sub:'Available for options',     color:'c-orange' },
+    { label:'Stock Buying Power',  value:`$${fmt(bal.stock_buying_power)}`,  sub:'Available for equities',    color:'c-blue' },
+    { label:'Long Market Value',   value:`$${fmt(bal.long_market_value)}`,   sub:'Value of long positions',   color:'c-green' },
+    { label:'Option Long Value',   value:`$${fmt(bal.option_long_value)}`,   sub:'Long options market value', color:'c-orange' },
+  ].map(c => `<div class="stat-card ${c.color}"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join('');
+
+  // PDT Tracker
+  $('pdt-used').textContent = pdt.used;
+  const pct = (pdt.used / pdt.max_trades) * 100;
+  const bar = $('pdt-bar');
+  bar.style.width = pct + '%';
+  bar.className   = 'pdt-bar-fill' + (pdt.used >= 3 ? ' danger' : pdt.used === 2 ? ' warn' : '');
+  $('pdt-remaining').textContent = `${pdt.remaining} trade${pdt.remaining !== 1 ? 's' : ''} remaining`;
+  $('pdt-remaining').style.color = pdt.remaining === 0 ? 'var(--red)' : pdt.remaining === 1 ? 'var(--yellow)' : 'var(--tgreen)';
+  const dayNames = ['Mon','Tue','Wed','Thu','Fri'];
+  const tradedSet = new Set(pdt.trade_dates || []);
+  $('pdt-days').innerHTML = pdt.window.map((date, i) => {
+    const isToday  = date === todayISO;
+    const isTraded = tradedSet.has(date);
+    return `<div class="pdt-day">
+      <div class="pdt-dot ${isTraded?'traded':'available'}${isToday?' today':''}">${isTraded?'&#x2714;':isToday?'&#x25CF;':''}</div>
+      <div class="day-lbl">${dayNames[i]||date.slice(5)}</div>
+      <div class="day-lbl" style="color:var(--border)">${date.slice(5)}</div>
+    </div>`;
+  }).join('');
+
+  // P&L chart
+  renderPnlChart(D);
+
+  // Positions — SPY only
+  const pos = (D.positions || []).filter(p => p.symbol.startsWith('SPY'));
+  $('pos-count').textContent = `${pos.length} SPY position${pos.length !== 1 ? 's' : ''}`;
+  $('pos-tbody').innerHTML   = pos.length === 0
+    ? `<tr><td colspan="7" class="empty">No open SPY positions</td></tr>`
+    : pos.map(p => {
+        const info     = optionInfo(p.symbol);
+        const qty      = p.quantity;
+        const side     = qty >= 0 ? `<span class="badge badge-long">Long</span>` : `<span class="badge badge-short">Short</span>`;
+        const typeBadge= info.type === 'option'
+          ? `<span class="badge badge-option">${info.cp === 'C' ? 'Call' : 'Put'}</span>`
+          : `<span class="badge badge-equity">Equity</span>`;
+        return `<tr>
+          <td><span class="mono">${p.symbol}</span></td>
+          <td>${typeBadge}</td><td>${side}</td>
+          <td style="font-weight:700">${Math.abs(qty)}</td>
+          <td>$${fmt(Math.abs(p.cost_basis))}</td>
+          <td>$${qty !== 0 ? fmt(Math.abs(p.cost_basis / qty)) : '&mdash;'}</td>
+          <td style="color:var(--muted)">${dtFmt(p.date_acquired)}</td>
+        </tr>`;
+      }).join('');
+
+  // Orders — SPY only
+  const ords = (D.orders || []).filter(o => o.symbol === 'SPY');
+  $('ord-count').textContent = `${ords.length} SPY order${ords.length !== 1 ? 's' : ''}`;
+  $('ord-tbody').innerHTML   = ords.length === 0
+    ? `<tr><td colspan="9" class="empty">No SPY orders found</td></tr>`
+    : ords.map(o => {
+        const legs      = Array.isArray(o.leg) ? o.leg : (o.leg ? [o.leg] : []);
+        const legCount  = legs.length || (o.num_legs || 1);
+        const avgFill   = o.avg_fill_price != null ? `$${fmt(Math.abs(o.avg_fill_price))}` : '&mdash;';
+        const legDetail = legs.map(l => `<div style="font-size:10.5px;color:var(--muted);white-space:nowrap">
+          ${l.side.replace('_to_',' &rarr; ')} <span style="color:var(--blue)">${l.option_symbol||l.symbol}</span> @$${fmt(l.avg_fill_price||0)}
+        </div>`).join('');
+        return `<tr>
+          <td><span class="mono" style="color:var(--muted)">#${o.id}</span></td>
+          <td style="color:var(--muted)">${dtFmt(o.create_date)}</td>
+          <td><span class="mono">${o.symbol}</span></td>
+          <td>${strategyBadge(o)}</td>
+          <td><span style="font-size:11px;color:var(--muted)">${cap(o.type)}</span></td>
+          <td><div style="font-weight:600">${legCount} leg${legCount!==1?'s':''}</div>${legDetail}</td>
+          <td>${fmt(o.quantity,0)}</td>
+          <td>${avgFill}</td>
+          <td>${statusBadge(o.status)}</td>
+        </tr>`;
+      }).join('');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  if (typeof window.TRADIER_DATA === 'undefined') {
+    document.querySelector('.panel-wrap').innerHTML = `
+      <div style="text-align:center;padding:80px">
+        <div style="font-size:48px;margin-bottom:16px">&#x26A0;</div>
+        <h2 style="margin-bottom:12px">Data file not found</h2>
+        <p style="color:var(--muted);margin-bottom:20px">Run the generator script first:</p>
+        <code style="display:block;background:var(--surface);border:1px solid var(--border);border-radius:6px;
+                     padding:14px 20px;font-size:14px;color:var(--tgreen);max-width:400px;margin:0 auto;font-family:'Courier New',monospace">
+          python generate_tradier_data.py
+        </code>
+        <p style="margin-top:14px;font-size:13px;color:var(--muted)">Then reload this page.</p>
+      </div>`;
+    return;
+  }
+  render(window.TRADIER_DATA);
+  startCountdown();
+
+  // Redraw chart on window resize
+  if (window.ResizeObserver) {
+    const chartWrap = document.getElementById('pnl-canvas-wrap');
+    if (chartWrap) {
+      new ResizeObserver(() => {
+        if (window.TRADIER_DATA) renderPnlChart(window.TRADIER_DATA);
+      }).observe(chartWrap);
+    }
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CS AlgoTrader App</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="backtest_data.js"></script>
+  <script src="forward_test_data.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:         #0d1117;
+      --surface:    #161b22;
+      --surface2:   #21262d;
+      --border:     #30363d;
+      --text:       #e6edf3;
+      --muted:      #8b949e;
+      --green:      #3fb950;
+      --red:        #f85149;
+      --yellow:     #d29922;
+      --blue:       #58a6ff;
+      --orange:     #ffa657;
+      --accent:     #1f6feb;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* Header */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    header .logo  { font-size: 20px; font-weight: 700; color: var(--blue); }
+    header .sub   { font-size: 13px; color: var(--muted); }
+
+    /* Tab bar */
+    .tab-bar {
+      display: flex;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 12px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-btn:hover  { color: var(--text); }
+    .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+    /* Tab panels */
+    .tab-panel { display: none; padding: 28px 24px; }
+    .tab-panel.active { display: block; }
+
+    /* Stat cards */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+    .stat-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 6px; }
+    .stat-card .value { font-size: 24px; font-weight: 700; }
+    .stat-card .sub   { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .pos { color: var(--green); }
+    .neg { color: var(--red); }
+    .neu { color: var(--blue); }
+
+    .section-title {
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .8px;
+      margin-bottom: 14px; padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Charts */
+    .chart-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
+    .chart-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px;
+    }
+    .chart-box h3 { font-size: 13px; color: var(--muted); margin-bottom: 14px; font-weight: 500; }
+    .chart-box canvas { max-height: 260px; }
+
+    /* Table */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: auto;
+      margin-bottom: 28px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    thead { position: sticky; top: 0; z-index: 1; }
+    th {
+      background: var(--surface2); color: var(--muted); font-weight: 600;
+      text-transform: uppercase; font-size: 11px; letter-spacing: .5px;
+      padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+    .badge {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 12px; font-size: 11px; font-weight: 600;
+    }
+    .badge-profit  { background: rgba(63,185,80,.15);  color: var(--green); }
+    .badge-call    { background: rgba(248,81,73,.15);  color: var(--red); }
+    .badge-put     { background: rgba(248,81,73,.15);  color: var(--red); }
+    .badge-double  { background: rgba(210,153,34,.15); color: var(--yellow); }
+    .badge-skipped { background: rgba(139,148,158,.15);color: var(--muted); }
+
+    /* Config grid */
+    .config-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px; font-size: 13px; margin-bottom: 28px;
+    }
+    .config-item {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 14px;
+      display: flex; justify-content: space-between;
+    }
+    .config-item .k { color: var(--muted); }
+    .config-item .v { font-weight: 600; color: var(--blue); }
+
+    /* Strategy rules tab */
+    .rules-layout { max-width: 900px; }
+    .rules-section { margin-bottom: 32px; }
+    .rules-section h2 {
+      font-size: 16px; font-weight: 700; color: var(--blue);
+      margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .rule-list { list-style: none; }
+    .rule-list li {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 12px 16px; margin-bottom: 8px;
+      display: flex; gap: 12px; align-items: flex-start;
+      font-size: 13.5px; line-height: 1.55;
+    }
+    .rule-list li .bullet {
+      background: var(--accent); color: #fff; border-radius: 50%;
+      width: 22px; height: 22px; min-width: 22px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; margin-top: 1px;
+    }
+    .rule-list li strong { color: var(--orange); }
+    .tip-box {
+      background: rgba(31,111,235,.1); border: 1px solid rgba(31,111,235,.3);
+      border-radius: 8px; padding: 14px 18px;
+      font-size: 13px; line-height: 1.6;
+    }
+    .tip-box .tip-title { font-weight: 700; color: var(--blue); margin-bottom: 6px; }
+    .warn-box {
+      background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.3);
+      border-radius: 8px; padding: 14px 18px;
+      font-size: 13px; line-height: 1.6; margin-bottom: 14px;
+    }
+    .warn-box .warn-title { font-weight: 700; color: var(--yellow); margin-bottom: 4px; }
+    .diagram {
+      font-family: "Courier New", monospace; font-size: 12px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 16px; line-height: 1.8;
+      overflow-x: auto; margin-bottom: 16px;
+    }
+    .dg-profit { color: var(--green); }
+    .dg-loss   { color: var(--red); }
+    .dg-strike { color: var(--orange); }
+
+    /* No data / loading */
+    .loading { text-align: center; padding: 80px 24px; color: var(--muted); font-size: 14px; }
+    .no-data {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 48px 32px; text-align: center;
+    }
+    .no-data h3 { color: var(--text); margin-bottom: 12px; font-size: 18px; }
+    .no-data p  { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+    .code-line {
+      display: block; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 9px 16px; font-family: "Courier New", monospace;
+      font-size: 13px; margin: 6px auto; max-width: 480px; text-align: left;
+      color: var(--green);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CS AlgoTrader</div>
+  <div class="sub">Paper Trading Dashboard &mdash; Alpaca</div>
+</header>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('backtest')">
+    &#x1F4CA; SPY IRON CONDOR 0DTE Backtesting Results
+  </button>
+  <button class="tab-btn" onclick="switchTab('strategy')">
+    &#x1F4CB; SPY IRON CONDOR 0DTE &#8211; Strategy
+  </button>
+  <button class="tab-btn" onclick="switchTab('forward')">
+    &#x1F7E2; Forward Test (2W)
+  </button>
+  <button class="tab-btn" onclick="switchTab('journal')">
+    &#x1F4D3; MaxAlgo-TradingJournal
+  </button>
+</div>
+
+<!-- ══ TAB: BACKTEST ═══════════════════════════════════════════════════════ -->
+<div id="tab-backtest" class="tab-panel active">
+
+  <div id="bt-loading" class="loading">Loading backtest results&hellip;</div>
+
+  <div id="bt-content" style="display:none">
+    <div class="stat-grid" id="stat-cards"></div>
+
+    <p class="section-title">Performance Charts</p>
+    <div class="chart-row">
+      <div class="chart-box">
+        <h3>Cumulative P&amp;L — Equity Curve</h3>
+        <canvas id="equityChart"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Trade Outcomes</h3>
+        <canvas id="outcomeChart"></canvas>
+      </div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-box">
+        <h3>Daily P&amp;L Distribution</h3>
+        <canvas id="pnlDistChart"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Monthly P&amp;L</h3>
+        <canvas id="monthlyChart"></canvas>
+      </div>
+    </div>
+
+    <p class="section-title">Strategy Configuration Used</p>
+    <div class="config-grid" id="config-grid"></div>
+
+    <p class="section-title">Trade Log</p>
+    <div style="margin-bottom:10px; display:flex; gap:10px; align-items:center;">
+      <input id="filter-input" type="text" placeholder="Filter by date or outcome&hellip;"
+        style="background:var(--surface);border:1px solid var(--border);border-radius:6px;
+               padding:7px 12px;color:var(--text);font-size:13px;width:260px;"
+        oninput="filterTable()" />
+      <span id="row-count" style="font-size:12px;color:var(--muted);"></span>
+    </div>
+    <div class="table-wrap" style="max-height:460px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th><th>SPY Open</th><th>High</th><th>Low</th>
+            <th>VIX</th><th>Short Call</th><th>Short Put</th>
+            <th>Wing</th><th>Credit</th><th>Outcome</th>
+            <th>P&amp;L</th><th>Cum P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody id="trade-tbody"></tbody>
+      </table>
+    </div>
+    <p id="generated-at" style="font-size:11px;color:var(--muted);margin-top:8px;"></p>
+  </div>
+
+  <div id="bt-nodata" class="no-data" style="display:none;">
+    <h3>No backtest data found</h3>
+    <p>Run the backtest script first, then refresh this page.</p>
+    <p style="margin-top:16px;"><strong>Step 1:</strong> Install dependencies</p>
+    <span class="code-line">pip install -r requirements.txt</span>
+    <p style="margin-top:12px;"><strong>Step 2:</strong> Run the backtest</p>
+    <span class="code-line">python -m iron_condor_0dte.run_backtest</span>
+    <p style="margin-top:16px; color:var(--muted); font-size:12px;">
+      Results are saved to <code>CS_ALGOTRADER_APP/backtest_results.json</code>
+    </p>
+  </div>
+
+</div>
+
+<!-- ══ TAB: STRATEGY ══════════════════════════════════════════════════════ -->
+<div id="tab-strategy" class="tab-panel">
+  <div class="rules-layout">
+
+    <p class="section-title">Strategy Overview</p>
+    <div class="tip-box" style="margin-bottom:28px;">
+      <div class="tip-title">SPY Iron Condor 0DTE &mdash; Breakeven Iron Condor Method</div>
+      Sell a same-day-expiring Iron Condor on SPY every trading day at <strong>10:15 AM ET</strong>.
+      The strategy profits from theta decay when SPY stays range-bound through the session.
+      Risk is strictly defined — maximum loss is capped at the wing width minus credit received.
+      With a tight 15% profit target and 45% stop loss, even stopped-out days remain net positive.
+      Target: <strong>~$200 per day</strong> with <strong>30 contracts</strong> (~$4,560 buying power required).
+    </div>
+
+    <!-- Payoff diagram -->
+    <div class="rules-section">
+      <h2>&#x1F4D0; Payoff Diagram</h2>
+      <div class="diagram">
+<span class="dg-loss">MAX LOSS  |                                                      MAX LOSS</span>
+<span class="dg-profit">          |         &#x2193; PROFIT ZONE (keep full premium) &#x2193;</span>
+<br/>
+<span class="dg-loss">&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;</span><span class="dg-strike">|Long Put|Short Put|</span><span class="dg-profit">&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;</span><span class="dg-strike">|Short Call|Long Call|</span><span class="dg-loss">&#x2500;&#x2500;&#x2500;</span>
+<br/>
+<span class="dg-strike">          LP        SP                            SC         LC</span>
+<span class="dg-strike">        (SP-$2)  (~15 delta)               (~15 delta)   (SC+$2)</span>
+<br/>
+Example: SPY @ $580
+  LP=$573  |  SP=$575  |  [profit zone]  |  SC=$585  |  LC=$587
+  Net credit: ~$0.85&#x2013;$1.20 per Iron Condor
+  Max risk:   $2.00 &#x2013; credit = ~$0.80&#x2013;$1.15 per share ($80&#x2013;$115/contract)
+      </div>
+    </div>
+
+    <!-- Entry -->
+    <div class="rules-section">
+      <h2>&#x1F7E2; Entry Rules</h2>
+      <ul class="rule-list">
+        <li><div class="bullet">1</div>
+          <div><strong>Time:</strong> 10:15 AM ET — after the opening volatility spike settles.
+          Bid-ask spreads are tighter and direction is established.</div>
+        </li>
+        <li><div class="bullet">2</div>
+          <div><strong>Instrument:</strong> SPY 0DTE options (expire same day). Available Mon–Fri.</div>
+        </li>
+        <li><div class="bullet">3</div>
+          <div><strong>Short strikes:</strong> Sell call and put at <strong>~15 delta</strong>
+          (~1.5 standard deviations OTM). Calculated with Black-Scholes using VIX as implied volatility.</div>
+        </li>
+        <li><div class="bullet">4</div>
+          <div><strong>Wing width:</strong> Buy protection leg <strong>$2.00 away</strong> from
+          each short strike. Maximum loss is capped at $2.00 &minus; credit received.</div>
+        </li>
+        <li><div class="bullet">5</div>
+          <div><strong>Minimum credit:</strong> Only enter if total credit &ge; <strong>$0.40</strong>
+          ($40 per contract). Skip if credit is too low.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Skip -->
+    <div class="rules-section">
+      <h2>&#x1F6AB; Skip / Avoid Days</h2>
+      <div class="warn-box">
+        <div class="warn-title">&#x26A0; High-Risk Days — Do NOT Trade</div>
+        These days carry elevated gamma risk that can blow through stops before orders fill.
+      </div>
+      <ul class="rule-list">
+        <li><div class="bullet">!</div>
+          <div><strong>FOMC announcement days</strong> — Fed rate decisions cause explosive moves
+          in SPY within seconds. Skip the entire trading day.</div>
+        </li>
+        <li><div class="bullet">!</div>
+          <div><strong>VIX above 30</strong> — Extreme implied volatility widens bid-ask spreads
+          to unprofitable levels. Wait for VIX to normalise.</div>
+        </li>
+        <li><div class="bullet">!</div>
+          <div><strong>Major macro events before 10 AM ET</strong> — CPI, NFP, GDP releases that
+          cause pre-market gaps &gt;1% in SPY. Consider delaying entry to 10:30 AM or skipping.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Exit -->
+    <div class="rules-section">
+      <h2>&#x1F3AF; Exit Rules</h2>
+      <ul class="rule-list">
+        <li><div class="bullet">A</div>
+          <div><strong>Profit Target — 15% of Credit:</strong> Close the entire Iron Condor when
+          the position has gained <strong>15% of premium received</strong>.
+          <br/>Example: collected $1.00 &rarr; close when buyback costs $0.85 &rarr; profit = $0.15/share ($15/contract).</div>
+        </li>
+        <li><div class="bullet">B</div>
+          <div><strong>Stop Loss — 45% of Credit:</strong> Close a threatened spread when its cost
+          to close reaches <strong>45% of the total credit</strong> received.
+          <br/>Example: collected $1.00 total &rarr; stop triggers at $0.45 cost on one side.
+          <br/>Net outcome: still net positive — since 45% &lt; 100% of credit, the overall position remains profitable even on a stop.</div>
+        </li>
+        <li><div class="bullet">C</div>
+          <div><strong>Force Close — 3:45 PM ET:</strong> Close ALL open legs regardless of P&amp;L.
+          <strong>Never hold 0DTE options to expiration.</strong> Gamma risk becomes extreme in the
+          final 15 minutes.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Risk -->
+    <div class="rules-section">
+      <h2>&#x1F6E1;&#xFE0F; Risk Management</h2>
+      <ul class="rule-list">
+        <li><div class="bullet">R1</div>
+          <div><strong>Fixed Position Size — 30 Contracts:</strong> This account is dedicated to
+          SPY Iron Condor only. Always trade exactly <strong>30 contracts</strong> per day,
+          sized to target <strong>~$200 daily profit</strong>.
+          Buying power required: <strong>~$4,560</strong> (max loss × 30 contracts).</div>
+        </li>
+        <li><div class="bullet">R2</div>
+          <div><strong>One Trade Per Day:</strong> One Iron Condor position (30 contracts) only.
+          Do not re-enter or add contracts intraday regardless of outcome.</div>
+        </li>
+        <li><div class="bullet">R3</div>
+          <div><strong>Stop Loss is Still Profitable:</strong> With SL at 45% of credit and PT at 15%,
+          the stop triggers before the full credit is consumed — meaning <strong>even stopped-out days
+          generate a net gain</strong>. The opposite unchallenged side retains its remaining value.</div>
+        </li>
+        <li><div class="bullet">R4</div>
+          <div><strong>Double Stop (both sides threatened simultaneously):</strong> Close all legs immediately.
+          Max loss = (wing &minus; credit) &times; 100 &times; 30 contracts = <strong>~$4,560</strong>.
+          This is the only scenario where a day ends with a loss.</div>
+        </li>
+        <li><div class="bullet">R5</div>
+          <div><strong>Weekly Review:</strong> If a double-stop occurs, review VIX and SPY range
+          before the next session. Consider skipping the next day if conditions are still extreme.</div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Capital Requirements -->
+    <div class="rules-section">
+      <h2>&#x1F4B0; Contract Size &amp; Capital Requirements</h2>
+      <div class="tip-box" style="margin-bottom:16px;">
+        <div class="tip-title">This account is dedicated to SPY Iron Condor 0DTE only</div>
+        No per-day budget cap is applied. The strategy always trades exactly <strong>30 contracts</strong>
+        as configured, sized to target <strong>~$200 profit per day</strong>.
+        Capital requirement is based purely on the broker margin for defined-risk spreads.
+      </div>
+      <ul class="rule-list">
+        <li><div class="bullet">C1</div>
+          <div><strong>Contract Size:</strong> 1 SPY options contract controls <strong>100 shares</strong>.
+          All P&amp;L is multiplied by 100 per contract.<br/>
+          Example: $0.48 credit/share &rarr; <strong>$48 cash received per contract &rarr; $1,439 for 30 contracts</strong>.</div>
+        </li>
+        <li><div class="bullet">C2</div>
+          <div><strong>Buying Power per Contract:</strong> Broker reserves the max loss of the spread as margin.<br/>
+          Max loss = (Wing &minus; credit) &times; 100 = ($2.00 &minus; $0.48) &times; 100 = <strong>~$152 per contract</strong>.<br/>
+          <strong>30 contracts &rarr; ~$4,560 buying power required per trade.</strong></div>
+        </li>
+        <li><div class="bullet">C3</div>
+          <div><strong>Minimum Capital to Trade 30 Contracts:</strong> <strong>$10,000</strong> (absolute floor).<br/>
+          Comfortable buffer: <strong>$15,000</strong> to absorb a double-stop day (~$4,560 max loss) and
+          continue trading the following session without margin pressure.</div>
+        </li>
+        <li><div class="bullet">C4</div>
+          <div><strong>Profit Target (15%):</strong> Close when position gains 15% of premium received.<br/>
+          $1,439 credit (30 contracts) &rarr; <strong>~$203 profit per day</strong> when profit target is hit.</div>
+        </li>
+        <li><div class="bullet">C5</div>
+          <div><strong>Stop Loss (45%):</strong> Close a threatened side when cost reaches 45% of credit.<br/>
+          $1,439 credit &rarr; stop at $647 cost on one side. Since 45% &lt; 100% of credit received,
+          <strong>even stopped-out days are net positive</strong> — no day results in a loss.</div>
+        </li>
+      </ul>
+      <div style="overflow-x:auto;margin-top:12px;">
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="background:var(--surface2);color:var(--muted);padding:8px 12px;border:1px solid var(--border);text-align:left;">Contracts</th>
+              <th style="background:var(--surface2);color:var(--muted);padding:8px 12px;border:1px solid var(--border);text-align:left;">Buying Power Required</th>
+              <th style="background:var(--surface2);color:var(--muted);padding:8px 12px;border:1px solid var(--border);text-align:left;">Min Recommended Capital</th>
+              <th style="background:var(--surface2);color:var(--muted);padding:8px 12px;border:1px solid var(--border);text-align:left;">Daily Credit Collected</th>
+              <th style="background:var(--surface2);color:var(--muted);padding:8px 12px;border:1px solid var(--border);text-align:left;">Est. Daily P&amp;L (PT hit)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td style="padding:7px 12px;border:1px solid var(--border);">1</td><td style="padding:7px 12px;border:1px solid var(--border);">~$152</td><td style="padding:7px 12px;border:1px solid var(--border);">$1,000</td><td style="padding:7px 12px;border:1px solid var(--border);">~$48</td><td style="padding:7px 12px;border:1px solid var(--border);color:var(--green);">~$7</td></tr>
+            <tr><td style="padding:7px 12px;border:1px solid var(--border);">10</td><td style="padding:7px 12px;border:1px solid var(--border);">~$1,520</td><td style="padding:7px 12px;border:1px solid var(--border);">$5,000</td><td style="padding:7px 12px;border:1px solid var(--border);">~$480</td><td style="padding:7px 12px;border:1px solid var(--border);color:var(--green);">~$68</td></tr>
+            <tr><td style="padding:7px 12px;border:1px solid var(--border);">20</td><td style="padding:7px 12px;border:1px solid var(--border);">~$3,040</td><td style="padding:7px 12px;border:1px solid var(--border);">$8,000</td><td style="padding:7px 12px;border:1px solid var(--border);">~$960</td><td style="padding:7px 12px;border:1px solid var(--border);color:var(--green);">~$135</td></tr>
+            <tr style="background:rgba(31,111,235,0.08)"><td style="padding:7px 12px;border:1px solid var(--border);color:var(--blue);font-weight:700;">30 &#x2190; current</td><td style="padding:7px 12px;border:1px solid var(--border);color:var(--blue);font-weight:700;">~$4,560</td><td style="padding:7px 12px;border:1px solid var(--border);color:var(--blue);font-weight:700;">$10,000–$15,000</td><td style="padding:7px 12px;border:1px solid var(--border);">~$1,439</td><td style="padding:7px 12px;border:1px solid var(--border);color:var(--green);font-weight:700;">~$203</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Quick ref -->
+    <div class="rules-section">
+      <h2>&#x1F4CC; Quick Reference Card</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="tip-box">
+          <div class="tip-title">Trade Structure</div>
+          Sell Put Spread + Sell Call Spread<br/>
+          Short strikes: ~15 delta<br/>
+          Wing width: $2.00<br/>
+          1 contract = 100 shares &rarr; $200 max BP
+        </div>
+        <div class="tip-box">
+          <div class="tip-title">Timing</div>
+          Entry: 10:15 AM ET<br/>
+          Profit target: 15% of credit<br/>
+          Stop loss: 45% of credit (per side)<br/>
+          Force close: 3:45 PM ET
+        </div>
+        <div class="tip-box">
+          <div class="tip-title">Skip Days</div>
+          VIX &gt; 30<br/>
+          FOMC announcement days<br/>
+          Pre-market gap &gt; 1%<br/>
+          Credit &lt; $0.40
+        </div>
+        <div class="tip-box">
+          <div class="tip-title">Capital Requirements (30 contracts)</div>
+          Buying power needed: ~$4,560<br/>
+          Min recommended capital: $10,000–$15,000<br/>
+          Max loss/contract: ~$152 (~$4,560 total)<br/>
+          30 contracts &rarr; ~$203 profit/day target
+        </div>
+      </div>
+    </div>
+
+    <!-- Alpaca setup -->
+    <div class="rules-section">
+      <h2>&#x1F527; Running the Live Trader</h2>
+      <ul class="rule-list">
+        <li><div class="bullet">1</div>
+          <div>Enable options trading on your Alpaca paper account:
+          <strong>alpaca.markets &rarr; Account &rarr; Options Trading</strong></div>
+        </li>
+        <li><div class="bullet">2</div>
+          <div>Install dependencies: <code style="color:var(--green);">pip install -r requirements.txt</code></div>
+        </li>
+        <li><div class="bullet">3</div>
+          <div>Double-click <strong>run_live_iron_condor.bat</strong> on market days.
+          The script enters at 10:15 AM, monitors exits, and force-closes at 3:45 PM.</div>
+        </li>
+        <li><div class="bullet">4</div>
+          <div>Run backtest any time:
+          <code style="color:var(--green);">python -m iron_condor_0dte.run_backtest</code></div>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ TAB: FORWARD TEST ═══════════════════════════════════════════════════ -->
+<div id="tab-forward" class="tab-panel">
+  <div id="ft-content" style="display:none">
+
+    <div class="stat-grid" id="ft-stat-cards"></div>
+
+    <p class="section-title">2-Week Forward Test Progress</p>
+    <div class="chart-row">
+      <div class="chart-box">
+        <h3>Cumulative P&amp;L vs Target</h3>
+        <canvas id="ftEquityChart"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Daily P&amp;L</h3>
+        <canvas id="ftDailyChart"></canvas>
+      </div>
+    </div>
+
+    <p class="section-title">Daily Trade Log</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Spreads</th>
+            <th>Entry</th>
+            <th>Exit</th>
+            <th>Outcome</th>
+            <th>Contracts</th>
+            <th>Credit Collected</th>
+            <th>Gross P&amp;L</th>
+            <th style="color:var(--yellow)">Commission</th>
+            <th style="color:var(--green)">Net P&amp;L</th>
+            <th>Cum Net P&amp;L</th>
+          </tr>
+        </thead>
+        <tbody id="ft-tbody"></tbody>
+      </table>
+    </div>
+    <p id="ft-generated-at" style="font-size:11px;color:var(--muted);margin-top:8px;"></p>
+  </div>
+
+  <div id="ft-nodata" class="no-data">
+    <h3>&#x1F7E1; Forward Test Not Started Yet</h3>
+    <p>Trading begins <strong>2026-05-18</strong> (tomorrow). Run the live trader each market day:</p>
+    <span class="code-line">run_live_iron_condor.bat</span>
+    <p style="margin-top:12px; color:var(--muted); font-size:12px;">
+      Results appear here automatically after each session.
+    </p>
+    <div style="margin-top:28px; display:grid; grid-template-columns:1fr 1fr; gap:12px; max-width:540px; margin-left:auto; margin-right:auto;">
+      <div class="tip-box" style="text-align:left">
+        <div class="tip-title">Forward Test Plan</div>
+        Start: 2026-05-18 (Monday)<br/>
+        End: 2026-05-29 (Friday)<br/>
+        Duration: 2 weeks / ~10 days<br/>
+        Entry: 10:15 AM ET daily
+      </div>
+      <div class="tip-box" style="text-align:left">
+        <div class="tip-title">Daily Targets (30 contracts)</div>
+        Credit target: ~$1,439/day<br/>
+        Profit target: ~$203/day (15%)<br/>
+        Stop loss: 45% of credit<br/>
+        Force close: 3:45 PM ET
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB: JOURNAL ════════════════════════════════════════════════════════ -->
+<div id="tab-journal" class="tab-panel">
+  <iframe src="trading-journal-dashboard.html"
+    style="width:100%;height:calc(100vh - 112px);border:none;border-radius:8px;"
+    id="journal-frame"></iframe>
+</div>
+
+<script>
+// ── Tab switching
+const TAB_NAMES = ['backtest', 'strategy', 'forward', 'journal'];
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) =>
+    b.classList.toggle('active', TAB_NAMES[i] === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ── Forward Test ──────────────────────────────────────────────────────────────
+(function () {
+  const ft = window.FORWARD_TEST_DATA;
+  if (!ft || !ft.results || ft.results.length === 0) return;
+
+  document.getElementById('ft-nodata').style.display  = 'none';
+  document.getElementById('ft-content').style.display = 'block';
+
+  const results  = ft.results;
+  const traded   = results.filter(r => r.outcome !== 'no_trade');
+  const wins     = traded.filter(r => r.pnl > 0);
+  const losses   = traded.filter(r => r.pnl < 0);
+  const totalPnl = traded.reduce((s, r) => s + r.pnl, 0);
+  const target   = ft.target_daily_pnl * 10; // 10-day total target
+  const pct      = target > 0 ? (totalPnl / target * 100).toFixed(1) : 0;
+  const daysLeft = 10 - traded.length;
+
+  const totalGross = traded.reduce((s, r) => s + (r.gross_pnl != null ? +r.gross_pnl : +r.pnl), 0);
+  const totalComm  = traded.reduce((s, r) => s + (r.commission != null ? +r.commission : 0), 0);
+  const cards = [
+    { label:'Net Cum. P&L',   val:`$${totalPnl.toFixed(2)}`, c: totalPnl>=0?'pos':'neg', sub:`After $${totalComm.toFixed(0)} commission` },
+    { label:'Gross Cum. P&L', val:`$${totalGross.toFixed(2)}`, c: totalGross>=0?'pos':'neg', sub:`Before commission` },
+    { label:'Days Traded',    val: traded.length, c:'neu', sub:`${daysLeft} days remaining` },
+    { label:'Win Rate',       val:`${traded.length?((wins.length/traded.length)*100).toFixed(1):0}%`, c:'pos', sub:`${wins.length}W / ${losses.length}L` },
+    { label:'Avg Net P&L/Day',val:`$${traded.length?(totalPnl/traded.length).toFixed(2):'0'}`, c: totalPnl>=0?'pos':'neg', sub:'Per session after comm.' },
+    { label:'On Track',       val: totalPnl >= traded.length * ft.target_daily_pnl ? '✓ Yes' : '↓ Behind', c: totalPnl >= traded.length * ft.target_daily_pnl ? 'pos':'neg', sub:'vs $203/day target' },
+  ];
+  const g = document.getElementById('ft-stat-cards');
+  cards.forEach(c => {
+    g.innerHTML += `<div class="stat-card"><div class="label">${c.label}</div><div class="value ${c.c}">${c.val}</div><div class="sub">${c.sub}</div></div>`;
+  });
+
+  // Equity chart
+  const cum  = traded.map(r => r.cumulative_pnl);
+  const tgtLine = traded.map((_, i) => (i + 1) * ft.target_daily_pnl);
+  new Chart(document.getElementById('ftEquityChart'), {
+    type:'line',
+    data:{
+      labels: traded.map(r => r.date),
+      datasets:[
+        { label:'Actual', data: cum, borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,0.08)',
+          fill:true, tension:0.3, pointRadius:4, borderWidth:2 },
+        { label:'Target', data: tgtLine, borderColor:'#58a6ff', borderDash:[6,3],
+          pointRadius:0, borderWidth:1.5, fill:false },
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:true,
+      plugins:{ legend:{ labels:{ color:'#e6edf3', font:{size:12} } } },
+      scales:{
+        x:{ ticks:{color:'#8b949e'}, grid:{color:'#21262d'} },
+        y:{ ticks:{color:'#8b949e', callback:v=>'$'+v}, grid:{color:'#21262d'} },
+      }
+    }
+  });
+
+  // Daily bar chart
+  new Chart(document.getElementById('ftDailyChart'), {
+    type:'bar',
+    data:{
+      labels: traded.map(r => r.date),
+      datasets:[{ data: traded.map(r => r.pnl),
+        backgroundColor: traded.map(r => r.pnl >= 0 ? 'rgba(63,185,80,0.65)':'rgba(248,81,73,0.65)'),
+        borderRadius:4 }]
+    },
+    options:{ responsive:true, maintainAspectRatio:true,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ ticks:{color:'#8b949e'}, grid:{color:'#21262d'} },
+        y:{ ticks:{color:'#8b949e', callback:v=>'$'+v}, grid:{color:'#21262d'} },
+      }
+    }
+  });
+
+  // Table
+  const tbody = document.getElementById('ft-tbody');
+  [...results].reverse().forEach(r => {
+    const gross    = r.gross_pnl != null ? +r.gross_pnl : +r.pnl;
+    const comm     = r.commission != null ? +r.commission : 0;
+    const net      = +r.pnl;
+    const cumNet   = +r.cumulative_pnl;
+    const netCls   = net > 0 ? 'pos' : net < 0 ? 'neg' : 'neu';
+    const cumCls   = cumNet >= 0 ? 'pos' : 'neg';
+    const grossCls = gross > 0 ? 'pos' : gross < 0 ? 'neg' : 'neu';
+    const outcomeBadge = r.outcome === 'exit'        ? 'badge-profit'  :
+                         r.outcome === 'force_close' ? 'badge-double'  : 'badge-skipped';
+    const outcomeLabel = r.close_reason === 'profit_target' ? '&#x2713; PT Hit'  :
+                         r.close_reason === 'stop_loss'     ? '&#x2717; SL Hit'  :
+                         r.close_reason === 'force_close'   ? '&#x23F1; Force'   :
+                         r.outcome || '–';
+    const fmtMoney = v => v >= 0 ? `+$${v.toFixed(2)}` : `-$${Math.abs(v).toFixed(2)}`;
+    tbody.innerHTML += `<tr>
+      <td style="font-weight:600">${r.date}</td>
+      <td style="font-family:monospace;color:var(--blue)">${r.spreads || '–'}</td>
+      <td style="color:var(--muted)">${r.entry_time || '–'}</td>
+      <td style="color:var(--muted)">${r.close_time || '–'}</td>
+      <td><span class="badge ${outcomeBadge}">${outcomeLabel}</span></td>
+      <td>${r.contracts || '–'}</td>
+      <td>$${r.credit_collected ? (+r.credit_collected).toFixed(2) : '–'}</td>
+      <td class="${grossCls}">${fmtMoney(gross)}</td>
+      <td style="color:var(--yellow)">-$${comm.toFixed(2)}</td>
+      <td class="${netCls}" style="font-weight:700">${fmtMoney(net)}</td>
+      <td class="${cumCls}" style="font-weight:600">$${cumNet.toFixed(2)}</td>
+    </tr>`;
+  });
+
+  document.getElementById('ft-generated-at').textContent = 'Updated: ' + new Date(ft.generated_at).toLocaleString();
+})();
+
+// ── Helpers
+const fmt  = (v, d=2) => v == null ? '–' : (+v).toFixed(d);
+const fmtD = v => v >= 0 ? `+$${fmt(v)}` : `-$${fmt(Math.abs(v))}`;
+const cls  = v => +v > 5 ? 'pos' : +v < -5 ? 'neg' : 'neu';
+
+const BADGE = {
+  profit_target: ['badge-profit','&#x2713; Target'],
+  call_stop:     ['badge-call',  '&#x2717; Call Stop'],
+  put_stop:      ['badge-put',   '&#x2717; Put Stop'],
+  double_stop:   ['badge-double','&#x2717;&#x2717; Dbl Stop'],
+  skipped:       ['badge-skipped','Skip'],
+};
+function badge(outcome) {
+  const [cls, lbl] = BADGE[outcome] || ['badge-skipped', outcome];
+  return `<span class="badge ${cls}">${lbl}</span>`;
+}
+
+// ── Load data
+let allTrades = [];
+
+if (window.BACKTEST_DATA) {
+  document.getElementById('bt-loading').style.display = 'none';
+  document.getElementById('bt-content').style.display = 'block';
+  render(window.BACKTEST_DATA);
+} else {
+  document.getElementById('bt-loading').style.display = 'none';
+  document.getElementById('bt-nodata').style.display = 'block';
+}
+
+function render(data) {
+  const s = data.summary;
+  allTrades = data.trades;
+
+  // Stat cards
+  const cards = [
+    { label:'Total P&L',      val:`$${(+s.total_pnl).toLocaleString('en-US',{minimumFractionDigits:2})}`, c: s.total_pnl>=0?'pos':'neg', sub:`${s.days_traded} days traded` },
+    { label:'Win Rate',       val:`${s.win_rate}%`, c: s.win_rate>=50?'pos':'neg', sub:`${s.winning_trades}W / ${s.losing_trades}L / ${s.breakeven_trades}BE` },
+    { label:'Profit Factor',  val:`${fmt(s.profit_factor)}x`, c: s.profit_factor>=1.5?'pos':'neg', sub:'Gross wins / gross losses' },
+    { label:'Avg Daily P&L',  val:`$${fmt(s.avg_daily_pnl)}`, c: s.avg_daily_pnl>=0?'pos':'neg', sub:'Per traded day' },
+    { label:'Sharpe Ratio',   val:fmt(s.sharpe_ratio), c: s.sharpe_ratio>=1?'pos':'neg', sub:'Annualised' },
+    { label:'Max Drawdown',   val:`$${Math.abs(s.max_drawdown).toLocaleString()}`, c:'neg', sub:`${fmt(Math.abs(s.max_drawdown_pct))}% of account` },
+    { label:'Avg Credit/Day', val:`$${fmt(s.avg_credit_collected)}`, c:'neu', sub:'Per contract' },
+    { label:'Best Day',       val:`$${fmt(s.best_day)}`, c:'pos', sub:'Single day' },
+    { label:'Worst Day',      val:`$${fmt(s.worst_day)}`, c:'neg', sub:'Single day' },
+    { label:'Days Skipped',   val:s.days_skipped, c:'neu', sub:`of ${s.total_trading_days} total` },
+  ];
+  const grid = document.getElementById('stat-cards');
+  cards.forEach(c => {
+    grid.innerHTML += `<div class="stat-card">
+      <div class="label">${c.label}</div>
+      <div class="value ${c.c}">${c.val}</div>
+      <div class="sub">${c.sub}</div>
+    </div>`;
+  });
+
+  // Config
+  const cfg = s.config_snapshot || {};
+  const cgrid = document.getElementById('config-grid');
+  Object.entries(cfg).forEach(([k,v]) => {
+    cgrid.innerHTML += `<div class="config-item">
+      <span class="k">${k.replace(/_/g,' ')}</span>
+      <span class="v">${v}</span>
+    </div>`;
+  });
+
+  // Equity curve
+  const traded = allTrades.filter(t => !t.skipped);
+  const eq = traded.map(t => t.cumulative_pnl);
+  const last = eq[eq.length-1] || 0;
+  new Chart(document.getElementById('equityChart'), {
+    type:'line',
+    data:{
+      labels: traded.map(t=>t.date),
+      datasets:[{
+        data: eq,
+        borderColor: last>=0?'#3fb950':'#f85149',
+        backgroundColor: last>=0?'rgba(63,185,80,0.08)':'rgba(248,81,73,0.08)',
+        fill:true, tension:0.3, pointRadius:0, borderWidth:2,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8b949e',maxTicksLimit:8},grid:{color:'#21262d'}},
+        y:{ticks:{color:'#8b949e',callback:v=>'$'+v},grid:{color:'#21262d'}},
+      }
+    }
+  });
+
+  // Outcome doughnut
+  const oc = {};
+  traded.forEach(t => { oc[t.outcome]=(oc[t.outcome]||0)+1; });
+  new Chart(document.getElementById('outcomeChart'), {
+    type:'doughnut',
+    data:{
+      labels: Object.keys(oc).map(k=>(BADGE[k]||['',''])[1].replace(/&#x[\dA-F]+;/gi,'')||k),
+      datasets:[{
+        data: Object.values(oc),
+        backgroundColor:['#3fb950','#f85149','#f85149','#d29922','#8b949e'],
+        borderWidth:2, borderColor:'#161b22',
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{legend:{position:'right',labels:{color:'#e6edf3',font:{size:12}}}}
+    }
+  });
+
+  // P&L distribution
+  const pnls = traded.map(t=>t.total_pnl);
+  const bins = {};
+  pnls.forEach(p => { const b=Math.floor(p/25)*25; bins[b]=(bins[b]||0)+1; });
+  const bk = Object.keys(bins).map(Number).sort((a,b)=>a-b);
+  new Chart(document.getElementById('pnlDistChart'), {
+    type:'bar',
+    data:{
+      labels: bk.map(b=>`$${b}`),
+      datasets:[{
+        data: bk.map(b=>bins[b]),
+        backgroundColor: bk.map(b=>b>=0?'rgba(63,185,80,0.6)':'rgba(248,81,73,0.6)'),
+        borderRadius:3,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8b949e',maxRotation:45},grid:{color:'#21262d'}},
+        y:{ticks:{color:'#8b949e'},grid:{color:'#21262d'}},
+      }
+    }
+  });
+
+  // Monthly P&L
+  const mo = {};
+  traded.forEach(t => { const m=t.date.slice(0,7); mo[m]=(mo[m]||0)+t.total_pnl; });
+  const mk = Object.keys(mo).sort();
+  new Chart(document.getElementById('monthlyChart'), {
+    type:'bar',
+    data:{
+      labels: mk,
+      datasets:[{
+        data: mk.map(m=>mo[m]),
+        backgroundColor: mk.map(m=>mo[m]>=0?'rgba(63,185,80,0.6)':'rgba(248,81,73,0.6)'),
+        borderRadius:3,
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#8b949e'},grid:{color:'#21262d'}},
+        y:{ticks:{color:'#8b949e',callback:v=>'$'+v},grid:{color:'#21262d'}},
+      }
+    }
+  });
+
+  renderTable(allTrades);
+  document.getElementById('generated-at').textContent =
+    'Generated: ' + new Date(data.generated_at).toLocaleString();
+}
+
+function renderTable(trades) {
+  const tbody = document.getElementById('trade-tbody');
+  tbody.innerHTML = '';
+  trades.forEach(t => {
+    if (t.skipped) {
+      tbody.innerHTML += `<tr>
+        <td>${t.date}</td><td>$${fmt(t.spy_open)}</td>
+        <td>$${fmt(t.spy_high)}</td><td>$${fmt(t.spy_low)}</td>
+        <td>${fmt(t.vix)}</td>
+        <td colspan="3" style="color:var(--muted)">${t.skip_reason}</td>
+        <td>–</td><td>${badge('skipped')}</td>
+        <td>–</td>
+        <td class="${cls(t.cumulative_pnl)}">$${fmt(t.cumulative_pnl)}</td>
+      </tr>`;
+      return;
+    }
+    tbody.innerHTML += `<tr>
+      <td>${t.date}</td>
+      <td>$${fmt(t.spy_open)}</td><td>$${fmt(t.spy_high)}</td><td>$${fmt(t.spy_low)}</td>
+      <td>${fmt(t.vix)}</td>
+      <td>$${fmt(t.short_call,1)}</td><td>$${fmt(t.short_put,1)}</td>
+      <td>$${fmt(t.long_call - t.short_call,1)}</td>
+      <td>$${fmt(t.credit_per_contract)}</td>
+      <td>${badge(t.outcome)}</td>
+      <td class="${cls(t.total_pnl)}">${fmtD(t.total_pnl)}</td>
+      <td class="${cls(t.cumulative_pnl)}">$${fmt(t.cumulative_pnl)}</td>
+    </tr>`;
+  });
+  document.getElementById('row-count').textContent = `${trades.length} rows`;
+}
+
+function filterTable() {
+  const q = document.getElementById('filter-input').value.toLowerCase();
+  renderTable(allTrades.filter(t =>
+    t.date.includes(q) || (t.outcome||'').includes(q) || (t.skip_reason||'').toLowerCase().includes(q)
+  ));
+}
+</script>
+</body>
+</html>

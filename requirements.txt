@@ -1,0 +1,16 @@
+# SPY Iron Condor 0DTE — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Broker
+requests>=2.31.0          # Tradier REST API client
+
+# Market data & options pricing
+yfinance>=0.2.40          # VIX + SPY price fallback
+numpy>=1.26.0
+scipy>=1.11.0
+
+# Data & analysis
+pandas>=2.0.0
+
+# Testing (CI only — not needed at runtime)
+# pip install pytest ruff
