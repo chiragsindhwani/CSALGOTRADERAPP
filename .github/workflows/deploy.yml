@@ -1,0 +1,53 @@
+name: Deploy to AWS EC2
+
+# Only runs after the CI workflow completes successfully on main
+on:
+  workflow_run:
+    workflows: ["CI — SPY Iron Condor 0DTE"]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy → EC2
+    runs-on: ubuntu-latest
+    # Guard: skip if CI failed or was cancelled
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host:     ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key:      ${{ secrets.EC2_SSH_KEY }}
+          port:     22
+          timeout:  120s
+          script: |
+            set -e
+            cd /opt/csalgotrader
+
+            echo "=== Pull latest code ==="
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "=== Update Python dependencies ==="
+            python3.11 -m pip install -r requirements.txt --quiet
+
+            echo "=== Validate + reload nginx ==="
+            sudo nginx -t && sudo systemctl reload nginx
+
+            echo "=== Refresh dashboard data ==="
+            python3.11 generate_tradier_data.py
+
+            echo ""
+            echo "Deploy complete  |  $(date '+%Y-%m-%d %H:%M:%S %Z')"
+            echo "Running commit   |  $(git log -1 --oneline)"
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "::error::Deployment to EC2 failed. Check SSH connectivity and server logs."
