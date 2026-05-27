@@ -2,9 +2,9 @@ name: CI — SPY Iron Condor 0DTE
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   # ── Job 1: Lint ──────────────────────────────────────────────────────────────
