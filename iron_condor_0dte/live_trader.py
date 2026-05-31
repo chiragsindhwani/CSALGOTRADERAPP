@@ -28,6 +28,7 @@ from .options_pricing import (
     iron_condor_credit,
     iron_condor_cost_to_close,
 )
+from .trade_logger import TradeLogger
 from .tradier_client import TradierClient
 
 log = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ def _get_vix_sigma() -> float:
     try:
         import yfinance as yf
         vix = yf.download("^VIX", period="2d", interval="1d", progress=False)
-        val = float(vix["Close"].iloc[-1]) / 100.0
+        val = float(vix["Close"].iloc[-1].item()) / 100.0
         return val if val > 0 else 0.18
     except Exception:
         return 0.18
@@ -126,6 +127,27 @@ class IronCondorTrader:
         )
         self.position = None   # dict once entered, None when flat
 
+        # Fetch account identity once at startup for Telegram alerts
+        try:
+            prof = self.client.get_profile()
+            self._account_name = prof.get("name", "Unknown")
+            acct = prof.get("account", {})
+            if isinstance(acct, list):   # multiple sub-accounts → find matching
+                acct = next(
+                    (a for a in acct if a.get("account_number") == self.client.account_id),
+                    acct[0] if acct else {},
+                )
+            self._account_id = acct.get("account_number", self.client.account_id)
+        except Exception as e:
+            log.warning("Could not fetch account profile for Telegram header: %s", e)
+            self._account_name = "Account"
+            self._account_id   = self.client.account_id
+
+        self._last_close_info: dict = {}   # populated by close_position(); read by run_daily()
+
+        # Trade logger — auto-selects CSV (local) or SQLite/PostgreSQL (AWS)
+        self._trade_logger = TradeLogger(root_dir=_ROOT)
+
     # ── Time helpers ──────────────────────────────────────────────────────────
 
     def is_pre_market(self) -> bool:
@@ -151,10 +173,82 @@ class IronCondorTrader:
                 (now.hour == self.cfg.FORCE_CLOSE_HOUR and
                  now.minute >= self.cfg.FORCE_CLOSE_MIN))
 
+    # ── Account identity helper ───────────────────────────────────────────────
+
+    def _acct_header(self) -> str:
+        """One-line account identifier prepended to every Telegram alert."""
+        return (
+            f"👤 <b>{self._account_name}</b>  ·  "
+            f"<code>#{self._account_id}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+        )
+
+    # ── Fill price helper ─────────────────────────────────────────────────────
+
+    # Terminal statuses that will never become fills
+    _TERMINAL_UNFILLED = frozenset({"rejected", "canceled", "expired", "cancel_pending"})
+
+    def _await_fill(self, order_id: str, timeout_sec: int = 120) -> float:
+        """
+        Poll Tradier until the order is filled or a terminal status is reached.
+
+        Returns avg_fill_price as reported by Tradier:
+          - Negative = net credit received (entry order)
+          - Positive = net debit paid     (close order)
+
+        Raises RuntimeError if:
+          - not filled within timeout_sec seconds, or
+          - Tradier reports a terminal non-fill status (rejected/canceled/expired).
+        """
+        deadline = time.time() + timeout_sec
+        while time.time() < deadline:
+            try:
+                order = self.client.get_order(order_id)
+            except Exception as e:
+                # Convert HTTP/network errors into RuntimeError so callers get
+                # a consistent exception type regardless of failure mode.
+                raise RuntimeError(f"Order {order_id} status poll failed: {e}") from e
+            # Tradier sometimes returns a leg sub-order when the parent is queried.
+            # Guard: only act on status if the returned id matches what we placed.
+            returned_id = str(order.get("id", order_id))
+            if returned_id != str(order_id):
+                log.warning(
+                    "  Order %s poll returned mismatched id=%s — ignoring, re-polling",
+                    order_id, returned_id,
+                )
+                time.sleep(5)
+                continue
+            status = order.get("status", "")
+            if status == "filled":
+                fill = float(order.get("avg_fill_price", 0) or 0)
+                log.info("  Order %s FILLED | avg_fill_price=%.4f", order_id, fill)
+                return fill
+            if status in self._TERMINAL_UNFILLED:
+                raise RuntimeError(
+                    f"Order {order_id} reached terminal status '{status}' — will not fill."
+                )
+            log.info("  Order %s status=%s — waiting for fill ...", order_id, status)
+            time.sleep(5)
+        raise RuntimeError(f"Order {order_id} did not fill within {timeout_sec}s")
+
     # ── Core trade logic ──────────────────────────────────────────────────────
 
-    def enter_trade(self) -> bool:
-        """Place 4-leg MLEG iron condor via Tradier. Returns True if position opened."""
+    def enter_trade(self, force_market: bool = False) -> bool:
+        """
+        Place 4-leg MLEG iron condor via Tradier. Returns True if position was opened.
+
+        Fix C — Two-attempt credit-limit order (default):
+          Attempt 1: credit limit = MIN_CREDIT ($0.40/shr), wait 3 min
+          Attempt 2: credit limit = MIN_CREDIT × 0.75 ($0.30/shr), wait 2 min
+          If neither fills → cancel, send NO-FILL Telegram, return False.
+
+        force_market=True — single market order, no credit floor, 60s fill wait.
+          Fix A still applies: abort if actual fill < MIN_ACTUAL_CREDIT.
+
+        Fix A — Post-fill viability check:
+          If actual fill < MIN_ACTUAL_CREDIT ($0.10/shr) → immediately flatten
+          with a market close order, send ABORTED Telegram, return False.
+        """
         now   = datetime.now(ET)
         S     = _get_spy_price(self.client)
         sigma = _get_vix_sigma()
@@ -166,63 +260,207 @@ class IronCondorTrader:
         long_call  = short_call + self.cfg.WING_WIDTH
         long_put   = short_put  - self.cfg.WING_WIDTH
 
-        credit    = iron_condor_credit(S, short_call, long_call, short_put, long_put, T, r, sigma)
+        bs_credit = iron_condor_credit(S, short_call, long_call, short_put, long_put, T, r, sigma)
         contracts = self.cfg.CONTRACTS
         # Tradier: $0.35/contract/leg; IC has 4 legs, charged on open AND close
         commission_per_trade = 4 * contracts * 0.35 * 2
 
-        if credit < self.cfg.MIN_CREDIT:
-            log.warning("Credit $%.2f below minimum $%.2f — skipping entry.",
-                        credit * 100, self.cfg.MIN_CREDIT * 100)
-            return False
-
-        log.info("Entering IC | SPY=%.2f | P%d/%d | C%d/%d | Credit=$%.2f | Contracts=%d",
-                 S, long_put, short_put, short_call, long_call, credit * 100, contracts)
-        log.info("  PT(15%%)=$%.2f  SL(45%%)=$%.2f",
-                 credit * self.cfg.PROFIT_TARGET_PCT * 100 * contracts,
-                 credit * self.cfg.STOP_LOSS_MULT    * 100 * contracts)
-
-        order = self.client.place_multileg_order([
+        entry_legs = [
             {"symbol": _build_option_symbol("SPY", now, long_call,  "call"), "side": "buy_to_open"},
             {"symbol": _build_option_symbol("SPY", now, short_call, "call"), "side": "sell_to_open"},
             {"symbol": _build_option_symbol("SPY", now, long_put,   "put"),  "side": "buy_to_open"},
             {"symbol": _build_option_symbol("SPY", now, short_put,  "put"),  "side": "sell_to_open"},
-        ], qty=contracts)
-        log.info("  MLEG entry order accepted | id=%s", order.get("id"))
+        ]
+
+        log.info(
+            "Entering IC | SPY=%.2f | P%d/%d | C%d/%d | B-S Credit=$%.4f/shr ($%.2f/contract) | Contracts=%d",
+            S, long_put, short_put, short_call, long_call, bs_credit, bs_credit * 100, contracts,
+        )
+
+        filled_order_id: str        = ""
+        actual_fill_price: float | None = None
+
+        # ── Market order path (force_market=True) ─────────────────────────────
+        if force_market:
+            log.info("  [Market order] Placing market MLEG order (no credit floor) | timeout=60s")
+            try:
+                order = self.client.place_multileg_order(
+                    entry_legs, qty=contracts, order_type="market"
+                )
+                oid = str(order.get("id"))
+                log.info("  MLEG market order accepted | id=%s", oid)
+                actual_fill_price = self._await_fill(oid, timeout_sec=60)
+                filled_order_id   = oid
+                log.info("  Market order filled | avg_fill_price=%.4f", actual_fill_price)
+            except RuntimeError as e:
+                log.warning("  Market order failed: %s", e)
+                _tg_send(
+                    self._acct_header() +
+                    f"⚠️ <b>MARKET ORDER FAILED</b>\n{e}"
+                )
+                return False
+
+        else:
+        # ── FIX C: Two-attempt credit-limit order ─────────────────────────────
+            LIMIT1   = round(self.cfg.MIN_CREDIT, 2)            # e.g. $0.40/shr
+            LIMIT2   = round(self.cfg.MIN_CREDIT * 0.75, 2)    # e.g. $0.30/shr
+            ATTEMPTS = [(LIMIT1, 180), (LIMIT2, 120)]           # (price, timeout_sec)
+
+            for attempt, (limit, timeout) in enumerate(ATTEMPTS, start=1):
+                oid: str | None = None
+                try:
+                    log.info(
+                        "  [Attempt %d/%d] Credit limit order: $%.2f/shr | timeout=%ds",
+                        attempt, len(ATTEMPTS), limit, timeout,
+                    )
+                    order = self.client.place_multileg_order(
+                        entry_legs, qty=contracts, order_type="credit", price=limit
+                    )
+                    oid = str(order.get("id"))
+                    log.info("  MLEG entry order accepted | id=%s", oid)
+
+                    actual_fill_price = self._await_fill(oid, timeout_sec=timeout)
+                    filled_order_id   = oid
+                    log.info(
+                        "  Filled on attempt %d | avg_fill_price=%.4f", attempt, actual_fill_price
+                    )
+                    break   # filled — exit the attempt loop
+
+                except RuntimeError as e:
+                    log.warning("  Attempt %d failed: %s", attempt, e)
+                    # Cancel the unfilled order before trying the next limit
+                    if oid and not filled_order_id:
+                        try:
+                            self.client.cancel_order(oid)
+                            log.info("  Cancelled unfilled order %s", oid)
+                        except Exception as ce:
+                            log.warning("  Could not cancel order %s: %s", oid, ce)
+
+        if actual_fill_price is None:
+            # Both attempts exhausted — no fill (limit-order path only)
+            log.warning("No fill after %d attempts — skipping entry.", len(ATTEMPTS))
+            _tg_send(
+                self._acct_header() +
+                f"⚠️ <b>NO FILL — ENTRY SKIPPED</b>\n"
+                f"━━━━━━━━━\n"
+                f"SPY Price   : ${S:.2f}\n"
+                f"Put Spread  : ${long_put:.0f} / ${short_put:.0f}\n"
+                f"Call Spread : ${short_call:.0f} / ${long_call:.0f}\n"
+                f"Limits tried: ${LIMIT1:.2f} -> ${LIMIT2:.2f} (per shr)\n"
+                f"B-S est credit: ${bs_credit * 100:.2f} / contract\n"
+                f"Time        : {now.strftime('%I:%M %p ET')}\n"
+                f"Market too wide or illiquid -- no trade today."
+            )
+            return False
+
+        # Entry MLEG: avg_fill_price is negative (net credit received per share).
+        actual_credit = abs(actual_fill_price)
+
+        log.info(
+            "  Actual credit $%.4f/shr ($%.2f total) vs B-S est $%.4f/shr",
+            actual_credit, actual_credit * 100 * contracts, bs_credit,
+        )
+
+        # ── FIX A: Post-fill viability check ─────────────────────────────────
+        if actual_credit < self.cfg.MIN_ACTUAL_CREDIT:
+            log.warning(
+                "  ABORT: actual credit $%.4f/shr < MIN_ACTUAL_CREDIT $%.4f/shr — "
+                "flattening position immediately.",
+                actual_credit, self.cfg.MIN_ACTUAL_CREDIT,
+            )
+            # Flatten with a market close order
+            try:
+                close_legs = [
+                    {"symbol": _build_option_symbol("SPY", now, long_call,  "call"), "side": "sell_to_close"},
+                    {"symbol": _build_option_symbol("SPY", now, short_call, "call"), "side": "buy_to_close"},
+                    {"symbol": _build_option_symbol("SPY", now, long_put,   "put"),  "side": "sell_to_close"},
+                    {"symbol": _build_option_symbol("SPY", now, short_put,  "put"),  "side": "buy_to_close"},
+                ]
+                abort_order = self.client.place_multileg_order(close_legs, qty=contracts)
+                abort_oid   = str(abort_order.get("id"))
+                log.info("  Abort market-close order placed | id=%s", abort_oid)
+                try:
+                    close_fill = self._await_fill(abort_oid, timeout_sec=120)
+                    abort_cost = abs(close_fill)
+                    abort_pnl  = round((actual_credit - abort_cost) * 100 * contracts, 2)
+                    log.info("  Abort close filled | cost=$%.4f/shr | round-trip P&L=$%.2f",
+                             abort_cost, abort_pnl)
+                except RuntimeError as e:
+                    log.warning("  Abort close fill not confirmed: %s", e)
+                    abort_pnl = 0.0
+            except Exception as e:
+                log.error("  Abort flatten order failed: %s", e)
+                abort_pnl = 0.0
+
+            _tg_send(
+                self._acct_header() +
+                f"🚫 <b>ENTRY ABORTED — CREDIT TOO LOW</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"📈 SPY Price      : ${S:.2f}\n"
+                f"📉 Put Spread     : ${long_put:.0f} / ${short_put:.0f}\n"
+                f"📈 Call Spread    : ${short_call:.0f} / ${long_call:.0f}\n"
+                f"💵 Actual Fill    : ${actual_credit * 100:.2f} / contract\n"
+                f"🔴 Min Required   : ${self.cfg.MIN_ACTUAL_CREDIT * 100:.2f} / contract\n"
+                f"💸 Round-trip P&L : ${abort_pnl:+.2f} (incl. slippage)\n"
+                f"🏛️ Commission     : -${commission_per_trade:.2f}\n"
+                f"⏰ Time           : {now.strftime('%I:%M %p ET')}\n"
+                f"ℹ️ Position flattened — no trade recorded."
+            )
+            return False
+
+        # ── Position viable — store and notify ───────────────────────────────
+        log.info("  PT(15%%)=$%.2f  SL(45%%)=$%.2f  (based on actual credit $%.4f/shr)",
+                 actual_credit * self.cfg.PROFIT_TARGET_PCT * 100 * contracts,
+                 actual_credit * self.cfg.STOP_LOSS_MULT    * 100 * contracts,
+                 actual_credit)
 
         self.position = {
-            "short_call":  short_call, "long_call": long_call,
-            "short_put":   short_put,  "long_put":  long_put,
-            "credit":      credit,     "contracts": contracts,
-            "sigma":       sigma,      "order_id":  str(order.get("id")),
-            "entry_time":  now.strftime("%H:%M ET"),
-            "commission":  commission_per_trade,
+            "short_call":      short_call,   "long_call":      long_call,
+            "short_put":       short_put,    "long_put":       long_put,
+            "credit":          bs_credit,    "actual_credit":  actual_credit,
+            "contracts":       contracts,
+            "sigma":           sigma,        "order_id":       filled_order_id,
+            "entry_time":      now.strftime("%H:%M ET"),
+            "commission":      commission_per_trade,
+            "spy_price_entry": S,            # capture SPY price at entry for trade log
         }
 
-        capital_used = (self.cfg.WING_WIDTH - credit) * 100 * contracts
+        capital_used = (self.cfg.WING_WIDTH - actual_credit) * 100 * contracts
         _tg_send(
+            self._acct_header() +
             f"🟢 <b>IRON CONDOR OPENED</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"📈 SPY Price   : ${S:.2f}\n"
-            f"📉 Put Spread  : ${long_put:.0f} / ${short_put:.0f}\n"
-            f"📈 Call Spread : ${short_call:.0f} / ${long_call:.0f}\n"
-            f"💵 Credit      : ${credit * 100:.2f} / contract\n"
-            f"📦 Contracts   : {contracts}\n"
-            f"💰 Total Credit: ${credit * 100 * contracts:.2f}\n"
-            f"🏦 Capital Used: ${capital_used:,.2f}  (max risk)\n"
-            f"📊 Return/Capital: {(credit * 100 * contracts / capital_used * 100):.1f}%\n"
-            f"🎯 Profit Target (15%): ${credit * self.cfg.PROFIT_TARGET_PCT * 100 * contracts:.2f}\n"
-            f"🛑 Stop Loss (45%)    : ${credit * self.cfg.STOP_LOSS_MULT * 100 * contracts:.2f}\n"
-            f"⏰ Entry Time  : {now.strftime('%I:%M %p ET')}"
+            f"📈 SPY Price      : ${S:.2f}\n"
+            f"📉 Put Spread     : ${long_put:.0f} / ${short_put:.0f}\n"
+            f"📈 Call Spread    : ${short_call:.0f} / ${long_call:.0f}\n"
+            f"💵 Credit (Actual): ${actual_credit * 100:.2f} / contract\n"
+            f"💵 Credit (B-S est): ${bs_credit * 100:.2f} / contract\n"
+            f"📦 Contracts      : {contracts}\n"
+            f"💰 Total Credit   : ${actual_credit * 100 * contracts:.2f}\n"
+            f"🏦 Capital Used   : ${capital_used:,.2f}  (max risk)\n"
+            f"📊 Return/Capital : {(actual_credit * 100 * contracts / capital_used * 100):.1f}%\n"
+            f"🎯 Profit Target (15%): ${actual_credit * self.cfg.PROFIT_TARGET_PCT * 100 * contracts:.2f}\n"
+            f"🛑 Stop Loss (45%)    : ${actual_credit * self.cfg.STOP_LOSS_MULT * 100 * contracts:.2f}\n"
+            f"⏰ Entry Time     : {now.strftime('%I:%M %p ET')}"
         )
         return True
 
-    def close_position(self, reason: str, pnl: float = 0.0) -> None:
-        """Submit MLEG close order via Tradier and clear self.position."""
-        if not self.position:
-            return
+    def close_position(self, reason: str, pnl_estimate: float = 0.0) -> tuple[float, float]:
+        """
+        Submit MLEG close order via Tradier and clear self.position.
 
-        p      = self.position
+        Awaits the actual close fill, then computes gross P&L from real entry and
+        exit fill prices.  Falls back to pnl_estimate if fill confirmation times out.
+
+        Returns (gross_pnl, net_pnl).
+        """
+        if not self.position:
+            return 0.0, 0.0
+
+        p              = self.position
+        actual_credit  = p.get("actual_credit", p["credit"])
+        commission     = p.get("commission", 4 * p["contracts"] * 0.35 * 2)
+
         emoji  = {"profit_target": "✅", "stop_loss": "🛑", "force_close": "⏱️"}.get(reason, "🔴")
         label  = {
             "profit_target": "PROFIT TARGET HIT",
@@ -230,9 +468,13 @@ class IronCondorTrader:
             "force_close":   "FORCE CLOSE (3:45 PM)",
         }.get(reason, reason.replace("_", " ").upper())
 
-        log.info("Closing position | reason=%s | P&L=$%.2f", reason, pnl)
+        log.info("Closing position | reason=%s | P&L estimate=$%.2f", reason, pnl_estimate)
 
-        today = datetime.now(ET)
+        today          = datetime.now(ET)
+        gross_pnl      = pnl_estimate   # replaced with actual once fill confirmed
+        close_order_id = None
+        actual_exit_cost: float | None = None   # per-share close fill (for trade logger)
+
         try:
             order = self.client.place_multileg_order([
                 {"symbol": _build_option_symbol("SPY", today, p["long_call"],  "call"), "side": "sell_to_close"},
@@ -240,60 +482,105 @@ class IronCondorTrader:
                 {"symbol": _build_option_symbol("SPY", today, p["long_put"],   "put"),  "side": "sell_to_close"},
                 {"symbol": _build_option_symbol("SPY", today, p["short_put"],  "put"),  "side": "buy_to_close"},
             ], qty=p["contracts"])
-            log.info("  MLEG close order accepted | id=%s", order.get("id"))
+            close_order_id = str(order.get("id"))
+            log.info("  MLEG close order accepted | id=%s", close_order_id)
         except Exception as e:
             log.error("  MLEG close order failed: %s", e)
 
-        commission   = p.get("commission", 4 * p["contracts"] * 0.35 * 2)
-        net_pnl      = pnl - commission
-        capital_used = (self.cfg.WING_WIDTH - p["credit"]) * 100 * p["contracts"]
+        # ── Fetch actual close fill price and compute real P&L ────────────────
+        # Close MLEG: avg_fill_price is positive (net debit paid to close).
+        if close_order_id:
+            try:
+                close_fill  = self._await_fill(close_order_id, timeout_sec=120)
+                actual_cost = abs(close_fill) if close_fill != 0 else None
+                if actual_cost is not None:
+                    actual_exit_cost = actual_cost
+                    gross_pnl = round(
+                        (actual_credit - actual_cost) * 100 * p["contracts"], 2
+                    )
+                    log.info(
+                        "  ⚡ Actual P&L: entry=$%.4f/shr close=$%.4f/shr gross=$%.2f",
+                        actual_credit, actual_cost, gross_pnl,
+                    )
+            except RuntimeError as e:
+                log.warning("  Close fill confirmation timeout (%s) — using estimate.", e)
+
+        net_pnl      = round(gross_pnl - commission, 2)
+        capital_used = (self.cfg.WING_WIDTH - actual_credit) * 100 * p["contracts"]
         roi          = (net_pnl / capital_used * 100) if capital_used > 0 else 0.0
-        _tg_send(
-            f"{emoji} <b>IRON CONDOR CLOSED — {label}</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"📉 Put Spread  : ${p['long_put']:.0f} / ${p['short_put']:.0f}\n"
-            f"📈 Call Spread : ${p['short_call']:.0f} / ${p['long_call']:.0f}\n"
-            f"💵 Credit Rcvd : ${p['credit'] * 100:.2f} / contract\n"
-            f"📦 Contracts   : {p['contracts']}\n"
-            f"🏦 Capital Used: ${capital_used:,.2f}  (max risk)\n"
-            f"💰 Gross P&L   : ${pnl:+.2f}\n"
-            f"🏛️ Commission  : -${commission:.2f}\n"
-            f"✅ Net P&L     : ${net_pnl:+.2f}\n"
-            f"📊 ROI on Capital: {roi:+.2f}%\n"
-            f"⏰ Close Time  : {today.strftime('%I:%M %p ET')}"
-        )
+
+        # Store close details so run_daily() can send ONE combined alert
+        # and _log_forward_test() can write the full trade record.
+        self._last_close_info = {
+            # Telegram alert fields
+            "emoji":           emoji,
+            "label":           label,
+            "close_time":      today.strftime("%I:%M %p ET"),
+            "capital_used":    capital_used,
+            "roi":             roi,
+            # P&L
+            "gross_pnl":       gross_pnl,
+            "net_pnl":         net_pnl,
+            "commission":      commission,
+            # Position details
+            "long_put":        p["long_put"],
+            "short_put":       p["short_put"],
+            "short_call":      p["short_call"],
+            "long_call":       p["long_call"],
+            "contracts":       p["contracts"],
+            # Fill prices
+            "actual_credit":   actual_credit,
+            "bs_credit":       p.get("credit"),          # B-S estimate at entry
+            "exit_cost":       actual_exit_cost,
+            # Extra context for trade logger
+            "entry_time":      p.get("entry_time"),
+            "entry_order_id":  p.get("order_id"),
+            "exit_order_id":   close_order_id,
+            "vix_sigma":       p.get("sigma"),
+            "spy_price_entry": p.get("spy_price_entry"),
+        }
+        log.info("Position closed | reason=%s | gross=$%.2f | net=$%.2f",
+                 reason, gross_pnl, net_pnl)
 
         self.position = None
+        return gross_pnl, net_pnl
 
     def check_exits(self) -> tuple[bool, float]:
         """
-        Evaluate profit target and stop loss.
-        Returns (closed, pnl). closed=True if position was just closed.
+        Evaluate profit target and stop loss against the current theoretical cost to close.
+        Uses actual_credit (real fill) as reference for thresholds and P&L estimation.
+
+        Returns (closed, gross_pnl). closed=True if position was just closed.
+        gross_pnl reflects actual fills once close_position() confirms the exit fill.
         """
         if not self.position:
             return False, 0.0
 
         p = self.position
         try:
-            now   = datetime.now(ET)
-            S     = _get_spy_price(self.client)
-            T     = _hours_to_close(now)
-            cost  = iron_condor_cost_to_close(
+            now    = datetime.now(ET)
+            S      = _get_spy_price(self.client)
+            T      = _hours_to_close(now)
+            cost   = iron_condor_cost_to_close(
                 S, p["short_call"], p["long_call"],
                 p["short_put"],  p["long_put"],
                 T, 0.05, p["sigma"]
             )
-            credit = p["credit"]
-            pnl    = (credit - cost) * 100 * p["contracts"]
-            log.info("SPY=%.2f | cost=%.4f | credit=%.4f | P&L=$%.2f",
-                     S, cost, credit, pnl)
+            # PT/SL thresholds are % moves of the B-S theoretical value at entry.
+            # Using actual_credit (fill) as the reference breaks when fill < B-S
+            # (e.g. limit fill at $0.40 vs B-S $0.78 → cost already exceeds SL).
+            bs_credit    = p["credit"]                          # B-S at entry
+            actual_credit = p.get("actual_credit", bs_credit)  # real fill
+            pnl_est = (actual_credit - cost) * 100 * p["contracts"]
+            log.info("SPY=%.2f | cost=%.4f | bs_ref=%.4f | actual_credit=%.4f | est P&L=$%.2f",
+                     S, cost, bs_credit, actual_credit, pnl_est)
 
-            if cost <= credit * (1 - self.cfg.PROFIT_TARGET_PCT):
-                self.close_position("profit_target", pnl)
-                return True, pnl
-            elif cost >= credit * (1 + self.cfg.STOP_LOSS_MULT):
-                self.close_position("stop_loss", pnl)
-                return True, pnl
+            if cost <= bs_credit * (1 - self.cfg.PROFIT_TARGET_PCT):
+                gross, _ = self.close_position("profit_target", pnl_est)
+                return True, gross
+            elif cost >= bs_credit * (1 + self.cfg.STOP_LOSS_MULT):
+                gross, _ = self.close_position("stop_loss", pnl_est)
+                return True, gross
 
         except Exception as e:
             log.error("Exit check error: %s", e)
@@ -339,6 +626,39 @@ class IronCondorTrader:
         self._write_forward_test_js(results)
         log.info("Forward test updated: %s | Gross=$%.2f | Commission=$%.2f | Net=$%.2f | Cum=$%.2f",
                  today, pnl, commission, net_pnl, cum)
+
+        # ── Persist to CSV (local) or SQLite/PostgreSQL (AWS) ─────────────────
+        ci = self._last_close_info   # populated by close_position()
+        trade_record = {
+            "date":             today,
+            "environment":      "SANDBOX" if self.cfg.PAPER_TRADE else "LIVE",
+            "account_id":       self._account_id,
+            "account_name":     self._account_name,
+            "symbol":           self.cfg.SYMBOL,
+            "strategy":         "Iron Condor 0DTE",
+            "contracts":        self.cfg.CONTRACTS,
+            "long_put":         ci.get("long_put"),
+            "short_put":        ci.get("short_put"),
+            "short_call":       ci.get("short_call"),
+            "long_call":        ci.get("long_call"),
+            "wing_width":       self.cfg.WING_WIDTH,
+            "entry_time":       ci.get("entry_time"),
+            "exit_time":        ci.get("close_time"),
+            "outcome":          outcome,
+            "entry_order_id":   ci.get("entry_order_id"),
+            "exit_order_id":    ci.get("exit_order_id"),
+            "entry_credit":     ci.get("actual_credit"),          # per-share actual fill
+            "bs_credit":        ci.get("bs_credit"),              # per-share B-S estimate
+            "exit_cost":        ci.get("exit_cost"),              # per-share close fill
+            "gross_pnl":        round(pnl, 2),
+            "commission":       round(commission, 2),
+            "net_pnl":          net_pnl,
+            "cumulative_pnl":   round(cum, 2),
+            "vix_sigma":        ci.get("vix_sigma"),
+            "spy_price_entry":  ci.get("spy_price_entry"),
+            "notes":            ci.get("notes", ""),
+        }
+        self._trade_logger.log_trade(trade_record)
 
     def _write_forward_test_js(self, results: list) -> None:
         js_path = _ROOT / "CS_ALGOTRADER_APP" / "forward_test_data.js"
@@ -407,17 +727,23 @@ class IronCondorTrader:
         if not self.is_market_hours():
             log.info("Market not open (now %s ET, weekday=%d). Session complete.",
                      now.strftime("%H:%M"), now.weekday())
-            _tg_send(f"⏭️ <b>SESSION SKIPPED — {now.strftime('%Y-%m-%d')}</b>\n"
-                     "Market closed or weekend.")
+            _tg_send(
+                self._acct_header() +
+                f"⏭️ <b>SESSION SKIPPED — {now.strftime('%Y-%m-%d')}</b>\n"
+                "Market closed or weekend."
+            )
             return
 
         # ── PDT guard ─────────────────────────────────────────────────────────
         dt_used = self._pdt_trade_count()
         if dt_used >= self.cfg.PDT_MAX_DAY_TRADES:
-            msg = (f"⚠️ <b>PDT LIMIT — NO TRADE {now.strftime('%Y-%m-%d')}</b>\n"
-                   f"Day trades used: {dt_used}/{self.cfg.PDT_MAX_DAY_TRADES} "
-                   f"in rolling {self.cfg.PDT_WINDOW_DAYS}-day window.\n"
-                   f"Resuming when oldest trade drops off window.")
+            msg = (
+                self._acct_header() +
+                f"⚠️ <b>PDT LIMIT — NO TRADE {now.strftime('%Y-%m-%d')}</b>\n"
+                f"Day trades used: {dt_used}/{self.cfg.PDT_MAX_DAY_TRADES} "
+                f"in rolling {self.cfg.PDT_WINDOW_DAYS}-day window.\n"
+                f"Resuming when oldest trade drops off window."
+            )
             log.info("PDT limit reached (%d/%d). Skipping today.", dt_used, self.cfg.PDT_MAX_DAY_TRADES)
             _tg_send(msg)
             return
@@ -441,18 +767,20 @@ class IronCondorTrader:
             if self.position and self.is_force_close_time():
                 p = self.position
                 try:
-                    S    = _get_spy_price(self.client)
-                    T    = _hours_to_close(now)
-                    cost = iron_condor_cost_to_close(
+                    S       = _get_spy_price(self.client)
+                    T       = _hours_to_close(now)
+                    cost    = iron_condor_cost_to_close(
                         S, p["short_call"], p["long_call"],
                         p["short_put"],  p["long_put"],
                         T, 0.05, p["sigma"]
                     )
-                    session_pnl = (p["credit"] - cost) * 100 * p["contracts"]
+                    actual_credit = p.get("actual_credit", p["credit"])
+                    pnl_est = (actual_credit - cost) * 100 * p["contracts"]
                 except Exception as e:
-                    log.error("Force-close P&L calc failed: %s", e)
-                    session_pnl = 0.0
-                self.close_position("force_close", session_pnl)
+                    log.error("Force-close P&L estimate failed: %s", e)
+                    pnl_est = 0.0
+                gross, _    = self.close_position("force_close", pnl_est)
+                session_pnl = gross
                 self._record_day_trade()
                 close_reason = "force_close"
                 break
@@ -463,7 +791,9 @@ class IronCondorTrader:
                     success = self.enter_trade()
                     entered = True
                     if success and self.position:
-                        session_credit = self.position["credit"]
+                        # Use actual fill credit for session tracking
+                        session_credit = self.position.get("actual_credit",
+                                                           self.position["credit"])
                 except Exception as e:
                     log.error("enter_trade raised an unexpected error: %s", e)
                     entered = True   # prevent retry loop
@@ -472,7 +802,7 @@ class IronCondorTrader:
             if self.position:
                 closed, pnl = self.check_exits()
                 if closed:
-                    session_pnl  = pnl
+                    session_pnl  = pnl   # actual gross P&L from close_position()
                     close_reason = "exit"
                     self._record_day_trade()
                     break   # done for the day
@@ -482,18 +812,34 @@ class IronCondorTrader:
         # ── End-of-session logging ────────────────────────────────────────────
         if entered and session_credit > 0:
             self._log_forward_test(close_reason, session_pnl, session_credit)
-            pnl_emoji = "💰" if session_pnl >= 0 else "📉"
+            ci        = self._last_close_info           # set by close_position()
+            net_pnl   = ci.get("net_pnl", session_pnl - (ci.get("commission", 0)))
+            pnl_emoji = "💰" if net_pnl >= 0 else "📉"
+            close_lbl = ci.get("label", close_reason.replace("_", " ").title())
             _tg_send(
+                self._acct_header() +
                 f"{pnl_emoji} <b>SESSION COMPLETE — {datetime.now(ET).strftime('%Y-%m-%d')}</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━\n"
-                f"📋 Outcome     : {close_reason.replace('_', ' ').title()}\n"
-                f"💵 Daily P&L   : ${session_pnl:+.2f}\n"
-                f"📦 Contracts   : {self.cfg.CONTRACTS}\n"
-                f"🎯 Daily Target: $203.00\n"
-                f"{'✅ TARGET MET' if session_pnl >= 203 else '⚠️ Below target'}"
+                f"📋 Outcome     : {close_lbl}\n"
+                + (f"📉 Put Spread  : ${ci['long_put']:.0f} / ${ci['short_put']:.0f}\n"
+                   f"📈 Call Spread : ${ci['short_call']:.0f} / ${ci['long_call']:.0f}\n"
+                   if ci.get("long_put") else "") +
+                f"⏰ Close Time  : {ci.get('close_time', '—')}\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"💵 Credit Rcvd : ${ci.get('actual_credit', session_credit) * 100:.2f} / contract\n"
+                f"📦 Contracts   : {ci.get('contracts', self.cfg.CONTRACTS)}\n"
+                f"🏦 Capital Used: ${ci.get('capital_used', 0):,.2f}  (max risk)\n"
+                f"💰 Gross P&L   : ${session_pnl:+.2f}\n"
+                f"🏛️ Commission  : -${ci.get('commission', 0):.2f}\n"
+                f"✅ Net P&L     : ${net_pnl:+.2f}\n"
+                f"📊 ROI on Capital: {ci.get('roi', 0):+.2f}%\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"🎯 Daily Target: $203.00  "
+                + ("✅ TARGET MET" if net_pnl >= 203 else "⚠️ Below target")
             )
         elif not entered:
             _tg_send(
+                self._acct_header() +
                 f"⏭️ <b>SESSION SKIPPED — {datetime.now(ET).strftime('%Y-%m-%d')}</b>\n"
                 "Entry window passed with no trade (market or data issue)."
             )

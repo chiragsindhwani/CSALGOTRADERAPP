@@ -27,8 +27,8 @@ jobs:
           ruff check \
             iron_condor_0dte/ \
             generate_tradier_data.py \
-            generate_journal_data.py \
             run_manual_trade.py \
+            resend_telegram_alert.py \
             --ignore E501,E402
 
   # ── Job 2: Security guards ───────────────────────────────────────────────────
@@ -124,12 +124,13 @@ jobs:
           python - <<'EOF'
           from iron_condor_0dte.config import config
 
-          assert config.CONTRACTS == 20,              f"FAIL: CONTRACTS={config.CONTRACTS}, expected 20"
           assert config.TARGET_DELTA == 0.15,          "FAIL: TARGET_DELTA != 0.15"
-          assert config.WING_WIDTH == 2.0,             "FAIL: WING_WIDTH != 2.0"
-          assert config.PROFIT_TARGET_PCT == 0.15,     "FAIL: PROFIT_TARGET_PCT != 0.15"
+          assert config.WING_WIDTH == 5.0,             f"FAIL: WING_WIDTH={config.WING_WIDTH}, expected 5.0"
+          assert config.MIN_CREDIT == 0.40,            f"FAIL: MIN_CREDIT={config.MIN_CREDIT}, expected 0.40"
+          assert config.MIN_ACTUAL_CREDIT == 0.10,     f"FAIL: MIN_ACTUAL_CREDIT={config.MIN_ACTUAL_CREDIT}, expected 0.10"
+          assert config.PROFIT_TARGET_PCT == 0.35,     "FAIL: PROFIT_TARGET_PCT != 0.35"
           assert config.STOP_LOSS_MULT == 0.45,        "FAIL: STOP_LOSS_MULT != 0.45"
-          assert config.ENTRY_HOUR == 10,              "FAIL: ENTRY_HOUR != 10 (10:15 AM ET = 9:15 AM CST)"
+          assert config.ENTRY_HOUR == 10,              "FAIL: ENTRY_HOUR != 10 (10:15 AM ET)"
           assert config.ENTRY_MIN  == 15,              "FAIL: ENTRY_MIN != 15"
           assert config.FORCE_CLOSE_HOUR == 15,        "FAIL: FORCE_CLOSE_HOUR != 15"
           assert config.FORCE_CLOSE_MIN  == 45,        "FAIL: FORCE_CLOSE_MIN != 45"
@@ -138,6 +139,7 @@ jobs:
           assert config.MAX_VIX == 30.0,               "FAIL: MAX_VIX != 30.0"
 
           commission = 4 * config.CONTRACTS * 0.35 * 2
-          print(f"Config OK | Contracts={config.CONTRACTS} | Commission/trade=${commission:.2f}")
+          print(f"Config OK | Contracts={config.CONTRACTS} | Wing=${config.WING_WIDTH} | Commission/trade=${commission:.2f}")
           print(f"Entry: {config.ENTRY_HOUR}:{config.ENTRY_MIN:02d} ET | Force-close: {config.FORCE_CLOSE_HOUR}:{config.FORCE_CLOSE_MIN:02d} ET")
+          print(f"Min credit: ${config.MIN_CREDIT:.2f}/shr | Min actual: ${config.MIN_ACTUAL_CREDIT:.2f}/shr")
           EOF

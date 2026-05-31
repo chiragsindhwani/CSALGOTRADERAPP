@@ -16,7 +16,7 @@ sudo mkdir -p "$APP_DIR"
 sudo chown ec2-user:ec2-user "$APP_DIR"
 git clone "$REPO" "$APP_DIR"
 cd "$APP_DIR"
-mkdir -p logs
+mkdir -p logs trades   # logs/ = session logs; trades/ = SQLite trade database
 
 echo "=== [3/7] Python dependencies ==="
 python3.11 -m pip install --upgrade pip --quiet
@@ -30,6 +30,16 @@ TRADIER_ACCOUNT_ID=REPLACE_WITH_YOUR_ACCOUNT_ID
 TRADIER_PAPER_TRADE=false
 TELEGRAM_BOT_TOKEN=REPLACE_WITH_YOUR_BOT_TOKEN
 TELEGRAM_CHAT_ID=REPLACE_WITH_YOUR_CHAT_ID
+
+# ── Trade Logger (auto-detected: local=CSV, AWS=SQLite) ──────────────────────
+# Leave DEPLOYMENT_ENV unset for auto-detect (EC2 metadata check).
+# Override: DEPLOYMENT_ENV=aws  or  DEPLOYMENT_ENV=local
+# DEPLOYMENT_ENV=aws
+
+# ── Optional: PostgreSQL / RDS instead of SQLite (AWS only) ─────────────────
+# Uncomment and set DATABASE_URL to use a PostgreSQL database.
+# Also run:  pip install psycopg2-binary
+# DATABASE_URL=postgresql://user:password@your-rds-endpoint:5432/trades
 ENVEOF
 chmod 600 "$APP_DIR/.env"
 echo ">>> EDIT $APP_DIR/.env now with real credentials <<<"

@@ -82,5 +82,15 @@
     "spreads": "P742/744 | C760/762",
     "gross_pnl": 211.75,
     "commission": 156.0
+  },
+  {
+    "date": "2026-05-27",
+    "outcome": "exit",
+    "gross_pnl": -60.0,
+    "commission": 56.0,
+    "pnl": -116.0,
+    "credit_collected": 40.0,
+    "contracts": 20,
+    "cumulative_pnl": 324.88
   }
 ]

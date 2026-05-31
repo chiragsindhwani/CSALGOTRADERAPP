@@ -20,8 +20,9 @@ class Config:
 
     # ── Strike Selection ──────────────────────────────────────────────────────
     TARGET_DELTA: float = 0.15       # short strikes at ~15 delta (OTM)
-    WING_WIDTH: float = 2.0          # $2-wide spreads (short → long)
-    MIN_CREDIT: float = 0.40         # skip trade if total credit < $0.40
+    WING_WIDTH: float   = 5.0        # $5-wide spreads — wider wings = more credit on 0DTE
+    MIN_CREDIT: float        = 0.40   # limit-order credit floor for entry (per share)
+    MIN_ACTUAL_CREDIT: float = 0.10   # post-fill abort threshold — if actual fill < this, exit immediately
 
     # ── Timing (Eastern Time) ─────────────────────────────────────────────────
     ENTRY_HOUR: int = 10
@@ -30,9 +31,9 @@ class Config:
     FORCE_CLOSE_MIN: int = 45        # Force close at 3:45 PM ET
 
     # ── Risk Management ───────────────────────────────────────────────────────
-    PROFIT_TARGET_PCT: float = 0.15  # Close at 15% of credit received
+    PROFIT_TARGET_PCT: float = 0.35  # Close at 35% of credit received
     STOP_LOSS_MULT: float = 0.45     # Stop loss at 45% of credit received
-    CONTRACTS: int = 20              # Contracts per trade (live trading)
+    CONTRACTS: int = 9               # Contracts per trade (live trading) — capped by TQQQ margin lock
 
     # ── PDT Rule ─────────────────────────────────────────────────────────────
     # Max 3 day-trade round-trips in any rolling 5-business-day window

@@ -3,7 +3,7 @@ echo ============================================================
 echo  SPY Iron Condor 0DTE -- LIVE TRADING
 echo  Entry : 9:15 AM CST (10:15 AM ET)
 echo  Close : 2:45 PM CST (3:45 PM ET)  force-close
-echo  Contracts : 20  ^|  Account: 6YB67181
+echo  Contracts : 9   ^|  Account: 6YB67181
 echo ============================================================
 echo.
 
@@ -28,7 +28,7 @@ echo Credentials loaded.
 echo Live account : api.tradier.com
 echo Entry window : 10:15-10:30 AM ET  ^(9:15-9:30 AM CST^)
 echo Force close  : 3:45 PM ET         ^(2:45 PM CST^)
-echo Contracts    : 20
+echo Contracts    : 9
 echo PDT limit    : 3 round-trips per rolling 5-business-day window
 echo.
 
@@ -36,4 +36,4 @@ python -m iron_condor_0dte.live_trader
 
 echo.
 echo Session ended. Run generate_tradier_data.py to refresh the dashboard.
-pause
+exit /b 0

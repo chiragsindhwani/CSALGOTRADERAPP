@@ -3,20 +3,20 @@
 *.env.*
 secrets.json
 
-# ── Generated data files (rebuilt by generate_*.py scripts) ─────────────────
-CS_ALGOTRADER_APP/tradier_account_data.js
-CS_ALGOTRADER_APP/backtest_data.js
-CS_ALGOTRADER_APP/forward_test_data.js
-CS_ALGOTRADER_APP/journal_data.js
+# ── Generated dashboard data (rebuilt by generate_tradier_data.py & run_backtest.py) ──
+dashboard/tradier_account_data.js
+dashboard/backtest_simulation.js
+dashboard/backtest_data.js
+dashboard/forward_test_data.js
+dashboard/journal_data.js
 
-# ── Session & operational logs ───────────────────────────────────────────────
-logs/
+# ── Trade logs & runtime state (machine-local, not committed) ────────────────
+data/trades/trade_log.csv
+data/logs/
+data/pdt_trades.json
 iron_condor_session.log
 scheduler_errors.log
 *.log
-
-# ── PDT & runtime state (machine-local) ──────────────────────────────────────
-pdt_trades.json
 
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
