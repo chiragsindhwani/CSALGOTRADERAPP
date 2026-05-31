@@ -30,7 +30,7 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8888 "') do (
 
 REM Start the server in background (serve from dashboard folder)
 set DASHBOARD_DIR=!PROJECT_ROOT!dashboard
-start /b python -m http.server 8888 --directory "!DASHBOARD_DIR!" >nul 2>&1
+start /b python scripts\dashboard_server.py >nul 2>&1
 
 REM Give server a moment to bind
 timeout /t 2 /nobreak >nul
@@ -50,4 +50,4 @@ echo.
 
 REM Keep the server running
 cd /d "!PROJECT_ROOT!"
-python -m http.server 8888 --directory "!DASHBOARD_DIR!"
+python scripts\dashboard_server.py

@@ -111,6 +111,18 @@
     }
     .toggle-strategy-lbl { font-size: 10px; color: var(--hdr-muted); font-weight: 600; white-space: nowrap; }
 
+    /* ── Broker toggle (blue accent for IBKR) ───────────────────────────────── */
+    .strategy-toggle-wrap.ibkr     { border-color: rgba(88,166,255,.5); background: rgba(88,166,255,.08); }
+    .toggle-track.ibkr { background: #1a6fcf; }
+
+    /* ── Broker toast notification ───────────────────────────────────────────── */
+    #broker-toast {
+      position: fixed; bottom: 20px; right: 20px;
+      padding: 10px 16px; border-radius: 6px;
+      font-size: 12px; font-weight: 600; color: #fff;
+      z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+
     /* ── Strategy OFF Warning Banner ─────────────────────────────────────────── */
     .strategy-banner {
       display: none;
@@ -449,6 +461,14 @@
       <span class="cd-icon">&#x23F1;</span>
       <span id="pill-text">1:00</span>
     </div>
+    <!-- Broker toggle -->
+    <div class="strategy-toggle-wrap" id="broker-toggle-wrap">
+      <span class="toggle-strategy-lbl">Broker</span>
+      <button class="toggle-track" id="broker-track" onclick="toggleBroker()" title="Toggle between Tradier and IBKR">
+        <span class="toggle-knob"></span>
+      </button>
+      <span class="toggle-status-lbl" id="broker-lbl">TRADIER</span>
+    </div>
     <!-- Strategy toggle -->
     <div class="strategy-toggle-wrap" id="strategy-toggle-wrap">
       <span class="toggle-strategy-lbl">Strategy</span>
@@ -478,6 +498,9 @@
   </div>
   <div class="strategy-banner-next" id="strategy-banner-next"></div>
 </div>
+
+<!-- Broker switch toast -->
+<div id="broker-toast" style="display:none"></div>
 
 <!-- MAIN -->
 <div class="main-wrap">
@@ -856,6 +879,59 @@ function checkAutoToggle() {
   }
 }
 setInterval(checkAutoToggle, 60000);
+
+// ── Broker Toggle ─────────────────────────────────────────────────────────────
+let _currentBroker = 'tradier';
+
+function initBrokerToggle() {
+  // Read from injected data payload first; fall back to API
+  const broker = (window.TRADIER_DATA && window.TRADIER_DATA.broker)
+    ? window.TRADIER_DATA.broker
+    : 'tradier';
+  _applyBrokerState(broker);
+
+  // Sync with server in case .env changed externally
+  fetch('/api/broker')
+    .then(r => r.json())
+    .then(d => _applyBrokerState(d.broker))
+    .catch(() => {});
+}
+
+function _applyBrokerState(broker) {
+  _currentBroker = broker;
+  const isIBKR = broker === 'ibkr';
+  const track  = $('broker-track');
+  const lbl    = $('broker-lbl');
+  const wrap   = $('broker-toggle-wrap');
+  if (!track) return;
+  track.className = 'toggle-track ' + (isIBKR ? 'ibkr' : 'on');
+  lbl.textContent = isIBKR ? 'IBKR' : 'TRADIER';
+  wrap.className  = 'strategy-toggle-wrap ' + (isIBKR ? 'ibkr' : 'active');
+}
+
+function toggleBroker() {
+  const next = _currentBroker === 'tradier' ? 'ibkr' : 'tradier';
+  fetch('/api/set-broker', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ broker: next }),
+  })
+  .then(r => r.json())
+  .then(d => {
+    _applyBrokerState(d.broker);
+    _showBrokerToast('Switched to ' + d.broker.toUpperCase(), false);
+  })
+  .catch(() => _showBrokerToast('Switch failed - is dashboard_server.py running?', true));
+}
+
+function _showBrokerToast(msg, isError) {
+  const t = $('broker-toast');
+  if (!t) return;
+  t.textContent  = msg;
+  t.style.background = isError ? '#f85149' : '#00c16c';
+  t.style.display    = 'block';
+  setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
 
 // ── Market-status clock ───────────────────────────────────────────────────────
 function updateMarketStatus() {
@@ -2060,6 +2136,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const bootEnabled = getStrategyEnabled();
   applyStrategyState(bootEnabled);
   if (bootEnabled) startCountdown();
+
+  // Broker toggle boot
+  initBrokerToggle();
 
   // Redraw charts on window resize
   if (window.ResizeObserver) {

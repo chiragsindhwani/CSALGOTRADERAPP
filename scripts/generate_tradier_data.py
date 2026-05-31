@@ -160,7 +160,7 @@ def _load_trade_log() -> list[dict]:
     return list(reversed(rows))   # newest first
 
 # ── Load .env manually (no extra deps) ────────────────────────────────────────
-_ROOT = Path(__file__).resolve().parent
+_ROOT = Path(__file__).resolve().parent.parent  # project root (one level up from scripts/)
 _env  = _ROOT / ".env"
 if _env.exists():
     for line in _env.read_text(encoding="utf-8").splitlines():
@@ -405,6 +405,7 @@ margin = balances.get("margin", {}) or {}
 payload = {
     "generated_at": datetime.now(ET).isoformat(),
     "environment":  "SANDBOX" if PAPER else "LIVE",
+    "broker":       os.getenv("BROKER", "tradier"),
     "profile": {
         "name":           profile.get("name", ""),
         "id":             profile.get("id", ""),
