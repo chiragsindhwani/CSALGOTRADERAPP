@@ -27,9 +27,8 @@ python -m iron_condor_0dte.live_trader
 ### Step 1: Download & Start IB Gateway
 
 **Option A: IB Gateway (Recommended)**
-```
-https://www.interactivebrokers.com/en/trading/ibgateway
-```
+- Latest version: https://www.interactivebrokers.com/en/trading/ibgateway-latest.php
+- Stable version: https://www.interactivebrokers.com/en/trading/ibgateway-stable.php
 
 After installation, start IB Gateway:
 - Paper account: connects to port **4002**
