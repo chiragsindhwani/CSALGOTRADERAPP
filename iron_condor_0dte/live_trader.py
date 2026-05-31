@@ -115,16 +115,45 @@ def _hours_to_close(now: datetime) -> float:
     return hours_left / (252 * 6.5)
 
 
+# ─── Broker Factory ───────────────────────────────────────────────────────────
+
+def _create_broker(cfg: Config):
+    """Create a broker client based on configuration.
+
+    Args:
+        cfg: Config object with BROKER selection and credentials
+
+    Returns:
+        TradierClient or IBKRClient instance
+
+    Raises:
+        ValueError: if BROKER is not 'tradier' or 'ibkr'
+    """
+    if cfg.BROKER == "ibkr":
+        from .ibkr_client import IBKRClient
+        return IBKRClient(
+            host=cfg.IBKR_HOST,
+            port=cfg.IBKR_PORT,
+            client_id=cfg.IBKR_CLIENT_ID,
+            account_id=cfg.IBKR_ACCOUNT_ID,
+            paper=cfg.IBKR_PAPER_TRADE,
+        )
+    elif cfg.BROKER == "tradier":
+        return TradierClient(
+            token=cfg.TRADIER_TOKEN or os.getenv("TRADIER_API_TOKEN", ""),
+            account_id=cfg.TRADIER_ACCOUNT_ID or os.getenv("TRADIER_ACCOUNT_ID", ""),
+            paper=cfg.PAPER_TRADE,
+        )
+    else:
+        raise ValueError(f"Unknown broker: {cfg.BROKER}. Must be 'tradier' or 'ibkr'.")
+
+
 # ─── Main Trader ──────────────────────────────────────────────────────────────
 
 class IronCondorTrader:
     def __init__(self, cfg: Config = None):
         self.cfg      = cfg or default_config
-        self.client   = TradierClient(
-            token=self.cfg.TRADIER_TOKEN or os.getenv("TRADIER_API_TOKEN", ""),
-            account_id=self.cfg.TRADIER_ACCOUNT_ID or os.getenv("TRADIER_ACCOUNT_ID", ""),
-            paper=self.cfg.PAPER_TRADE,
-        )
+        self.client   = _create_broker(self.cfg)
         self.position = None   # dict once entered, None when flat
 
         # Fetch account identity once at startup for Telegram alerts
@@ -714,138 +743,146 @@ class IronCondorTrader:
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def run_daily(self) -> None:
-        log.info("=== SPY Iron Condor 0DTE — Daily Session Started ===")
+        try:
+            log.info("=== SPY Iron Condor 0DTE — Daily Session Started ===")
 
-        # If started pre-market, wait until 9:00 AM ET
-        while self.is_pre_market():
+            # If started pre-market, wait until 9:00 AM ET
+            while self.is_pre_market():
+                now = datetime.now(ET)
+                log.info("Pre-market — waiting for 9:00 AM ET (now %s ET)",
+                         now.strftime("%H:%M"))
+                time.sleep(60)
+
             now = datetime.now(ET)
-            log.info("Pre-market — waiting for 9:00 AM ET (now %s ET)",
-                     now.strftime("%H:%M"))
-            time.sleep(60)
-
-        now = datetime.now(ET)
-        if not self.is_market_hours():
-            log.info("Market not open (now %s ET, weekday=%d). Session complete.",
-                     now.strftime("%H:%M"), now.weekday())
-            _tg_send(
-                self._acct_header() +
-                f"⏭️ <b>SESSION SKIPPED — {now.strftime('%Y-%m-%d')}</b>\n"
-                "Market closed or weekend."
-            )
-            return
-
-        # ── PDT guard ─────────────────────────────────────────────────────────
-        dt_used = self._pdt_trade_count()
-        if dt_used >= self.cfg.PDT_MAX_DAY_TRADES:
-            msg = (
-                self._acct_header() +
-                f"⚠️ <b>PDT LIMIT — NO TRADE {now.strftime('%Y-%m-%d')}</b>\n"
-                f"Day trades used: {dt_used}/{self.cfg.PDT_MAX_DAY_TRADES} "
-                f"in rolling {self.cfg.PDT_WINDOW_DAYS}-day window.\n"
-                f"Resuming when oldest trade drops off window."
-            )
-            log.info("PDT limit reached (%d/%d). Skipping today.", dt_used, self.cfg.PDT_MAX_DAY_TRADES)
-            _tg_send(msg)
-            return
-        log.info("PDT: %d/%d day trades used in rolling window. Proceeding.",
-                 dt_used, self.cfg.PDT_MAX_DAY_TRADES)
-
-        entered        = False
-        session_pnl    = 0.0
-        session_credit = 0.0
-        close_reason   = "no_trade"
-
-        while True:
-            now = datetime.now(ET)
-
-            # ── Market closed ─────────────────────────────────────────────────
             if not self.is_market_hours():
-                log.info("Market closed at %s ET. Session complete.", now.strftime("%H:%M"))
-                break
+                log.info("Market not open (now %s ET, weekday=%d). Session complete.",
+                         now.strftime("%H:%M"), now.weekday())
+                _tg_send(
+                    self._acct_header() +
+                    f"⏭️ <b>SESSION SKIPPED — {now.strftime('%Y-%m-%d')}</b>\n"
+                    "Market closed or weekend."
+                )
+                return
 
-            # ── Force close at 3:45 PM ────────────────────────────────────────
-            if self.position and self.is_force_close_time():
-                p = self.position
-                try:
-                    S       = _get_spy_price(self.client)
-                    T       = _hours_to_close(now)
-                    cost    = iron_condor_cost_to_close(
-                        S, p["short_call"], p["long_call"],
-                        p["short_put"],  p["long_put"],
-                        T, 0.05, p["sigma"]
-                    )
-                    actual_credit = p.get("actual_credit", p["credit"])
-                    pnl_est = (actual_credit - cost) * 100 * p["contracts"]
-                except Exception as e:
-                    log.error("Force-close P&L estimate failed: %s", e)
-                    pnl_est = 0.0
-                gross, _    = self.close_position("force_close", pnl_est)
-                session_pnl = gross
-                self._record_day_trade()
-                close_reason = "force_close"
-                break
+            # ── PDT guard ─────────────────────────────────────────────────────────
+            dt_used = self._pdt_trade_count()
+            if dt_used >= self.cfg.PDT_MAX_DAY_TRADES:
+                msg = (
+                    self._acct_header() +
+                    f"⚠️ <b>PDT LIMIT — NO TRADE {now.strftime('%Y-%m-%d')}</b>\n"
+                    f"Day trades used: {dt_used}/{self.cfg.PDT_MAX_DAY_TRADES} "
+                    f"in rolling {self.cfg.PDT_WINDOW_DAYS}-day window.\n"
+                    f"Resuming when oldest trade drops off window."
+                )
+                log.info("PDT limit reached (%d/%d). Skipping today.", dt_used, self.cfg.PDT_MAX_DAY_TRADES)
+                _tg_send(msg)
+                return
+            log.info("PDT: %d/%d day trades used in rolling window. Proceeding.",
+                     dt_used, self.cfg.PDT_MAX_DAY_TRADES)
 
-            # ── Entry window: 10:15–10:29 AM ─────────────────────────────────
-            if not entered and not self.position and self.is_entry_time():
-                try:
-                    success = self.enter_trade()
-                    entered = True
-                    if success and self.position:
-                        # Use actual fill credit for session tracking
-                        session_credit = self.position.get("actual_credit",
-                                                           self.position["credit"])
-                except Exception as e:
-                    log.error("enter_trade raised an unexpected error: %s", e)
-                    entered = True   # prevent retry loop
+            entered        = False
+            session_pnl    = 0.0
+            session_credit = 0.0
+            close_reason   = "no_trade"
 
-            # ── Monitor open position ─────────────────────────────────────────
-            if self.position:
-                closed, pnl = self.check_exits()
-                if closed:
-                    session_pnl  = pnl   # actual gross P&L from close_position()
-                    close_reason = "exit"
+            while True:
+                now = datetime.now(ET)
+
+                # ── Market closed ─────────────────────────────────────────────────
+                if not self.is_market_hours():
+                    log.info("Market closed at %s ET. Session complete.", now.strftime("%H:%M"))
+                    break
+
+                # ── Force close at 3:45 PM ────────────────────────────────────────
+                if self.position and self.is_force_close_time():
+                    p = self.position
+                    try:
+                        S       = _get_spy_price(self.client)
+                        T       = _hours_to_close(now)
+                        cost    = iron_condor_cost_to_close(
+                            S, p["short_call"], p["long_call"],
+                            p["short_put"],  p["long_put"],
+                            T, 0.05, p["sigma"]
+                        )
+                        actual_credit = p.get("actual_credit", p["credit"])
+                        pnl_est = (actual_credit - cost) * 100 * p["contracts"]
+                    except Exception as e:
+                        log.error("Force-close P&L estimate failed: %s", e)
+                        pnl_est = 0.0
+                    gross, _    = self.close_position("force_close", pnl_est)
+                    session_pnl = gross
                     self._record_day_trade()
-                    break   # done for the day
+                    close_reason = "force_close"
+                    break
 
-            time.sleep(60)
+                # ── Entry window: 10:15–10:29 AM ─────────────────────────────────
+                if not entered and not self.position and self.is_entry_time():
+                    try:
+                        success = self.enter_trade()
+                        entered = True
+                        if success and self.position:
+                            # Use actual fill credit for session tracking
+                            session_credit = self.position.get("actual_credit",
+                                                               self.position["credit"])
+                    except Exception as e:
+                        log.error("enter_trade raised an unexpected error: %s", e)
+                        entered = True   # prevent retry loop
 
-        # ── End-of-session logging ────────────────────────────────────────────
-        if entered and session_credit > 0:
-            self._log_forward_test(close_reason, session_pnl, session_credit)
-            ci        = self._last_close_info           # set by close_position()
-            net_pnl   = ci.get("net_pnl", session_pnl - (ci.get("commission", 0)))
-            pnl_emoji = "💰" if net_pnl >= 0 else "📉"
-            close_lbl = ci.get("label", close_reason.replace("_", " ").title())
-            _tg_send(
-                self._acct_header() +
-                f"{pnl_emoji} <b>SESSION COMPLETE — {datetime.now(ET).strftime('%Y-%m-%d')}</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
-                f"📋 Outcome     : {close_lbl}\n"
-                + (f"📉 Put Spread  : ${ci['long_put']:.0f} / ${ci['short_put']:.0f}\n"
-                   f"📈 Call Spread : ${ci['short_call']:.0f} / ${ci['long_call']:.0f}\n"
-                   if ci.get("long_put") else "") +
-                f"⏰ Close Time  : {ci.get('close_time', '—')}\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
-                f"💵 Credit Rcvd : ${ci.get('actual_credit', session_credit) * 100:.2f} / contract\n"
-                f"📦 Contracts   : {ci.get('contracts', self.cfg.CONTRACTS)}\n"
-                f"🏦 Capital Used: ${ci.get('capital_used', 0):,.2f}  (max risk)\n"
-                f"💰 Gross P&L   : ${session_pnl:+.2f}\n"
-                f"🏛️ Commission  : -${ci.get('commission', 0):.2f}\n"
-                f"✅ Net P&L     : ${net_pnl:+.2f}\n"
-                f"📊 ROI on Capital: {ci.get('roi', 0):+.2f}%\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 Daily Target: $203.00  "
-                + ("✅ TARGET MET" if net_pnl >= 203 else "⚠️ Below target")
-            )
-        elif not entered:
-            _tg_send(
-                self._acct_header() +
-                f"⏭️ <b>SESSION SKIPPED — {datetime.now(ET).strftime('%Y-%m-%d')}</b>\n"
-                "Entry window passed with no trade (market or data issue)."
-            )
+                # ── Monitor open position ─────────────────────────────────────────
+                if self.position:
+                    closed, pnl = self.check_exits()
+                    if closed:
+                        session_pnl  = pnl   # actual gross P&L from close_position()
+                        close_reason = "exit"
+                        self._record_day_trade()
+                        break   # done for the day
 
-        log.info("=== Daily Session Complete | P&L=$%.2f | Reason=%s ===",
-                 session_pnl, close_reason)
+                time.sleep(60)
+
+            # ── End-of-session logging ────────────────────────────────────────────
+            if entered and session_credit > 0:
+                self._log_forward_test(close_reason, session_pnl, session_credit)
+                ci        = self._last_close_info           # set by close_position()
+                net_pnl   = ci.get("net_pnl", session_pnl - (ci.get("commission", 0)))
+                pnl_emoji = "💰" if net_pnl >= 0 else "📉"
+                close_lbl = ci.get("label", close_reason.replace("_", " ").title())
+                _tg_send(
+                    self._acct_header() +
+                    f"{pnl_emoji} <b>SESSION COMPLETE — {datetime.now(ET).strftime('%Y-%m-%d')}</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"📋 Outcome     : {close_lbl}\n"
+                    + (f"📉 Put Spread  : ${ci['long_put']:.0f} / ${ci['short_put']:.0f}\n"
+                       f"📈 Call Spread : ${ci['short_call']:.0f} / ${ci['long_call']:.0f}\n"
+                       if ci.get("long_put") else "") +
+                    f"⏰ Close Time  : {ci.get('close_time', '—')}\n"
+                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"💵 Credit Rcvd : ${ci.get('actual_credit', session_credit) * 100:.2f} / contract\n"
+                    f"📦 Contracts   : {ci.get('contracts', self.cfg.CONTRACTS)}\n"
+                    f"🏦 Capital Used: ${ci.get('capital_used', 0):,.2f}  (max risk)\n"
+                    f"💰 Gross P&L   : ${session_pnl:+.2f}\n"
+                    f"🏛️ Commission  : -${ci.get('commission', 0):.2f}\n"
+                    f"✅ Net P&L     : ${net_pnl:+.2f}\n"
+                    f"📊 ROI on Capital: {ci.get('roi', 0):+.2f}%\n"
+                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"🎯 Daily Target: $203.00  "
+                    + ("✅ TARGET MET" if net_pnl >= 203 else "⚠️ Below target")
+                )
+            elif not entered:
+                _tg_send(
+                    self._acct_header() +
+                    f"⏭️ <b>SESSION SKIPPED — {datetime.now(ET).strftime('%Y-%m-%d')}</b>\n"
+                    "Entry window passed with no trade (market or data issue)."
+                )
+
+            log.info("=== Daily Session Complete | P&L=$%.2f | Reason=%s ===",
+                     session_pnl, close_reason)
+        finally:
+            # Disconnect broker client (IBKR needs explicit disconnect; Tradier is no-op)
+            if hasattr(self.client, "disconnect"):
+                try:
+                    self.client.disconnect()
+                except Exception as e:
+                    log.warning("Broker disconnect error: %s", e)
 
 
 if __name__ == "__main__":

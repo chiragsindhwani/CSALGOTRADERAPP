@@ -3,6 +3,7 @@
 
 # Broker
 requests>=2.31.0          # Tradier REST API client
+ib_insync>=0.9.86         # Interactive Brokers (IBKR) API client
 
 # Market data & options pricing
 yfinance>=0.2.40          # VIX + SPY price fallback

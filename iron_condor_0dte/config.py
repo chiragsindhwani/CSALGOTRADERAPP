@@ -9,10 +9,20 @@ from typing import List
 
 @dataclass
 class Config:
+    # ── Broker Selection ──────────────────────────────────────────────────────
+    BROKER: str = os.getenv("BROKER", "tradier").lower()
+
     # ── Tradier Credentials ───────────────────────────────────────────────────
     TRADIER_TOKEN:      str  = os.getenv("TRADIER_API_TOKEN", "")
     TRADIER_ACCOUNT_ID: str  = os.getenv("TRADIER_ACCOUNT_ID", "")
     PAPER_TRADE:        bool = os.getenv("TRADIER_PAPER_TRADE", "true").lower() == "true"
+
+    # ── IBKR Credentials ──────────────────────────────────────────────────────
+    IBKR_HOST:         str   = os.getenv("IBKR_HOST", "127.0.0.1")
+    IBKR_PORT:         int   = int(os.getenv("IBKR_PORT", "4002"))
+    IBKR_CLIENT_ID:    int   = int(os.getenv("IBKR_CLIENT_ID", "1"))
+    IBKR_ACCOUNT_ID:   str   = os.getenv("IBKR_ACCOUNT_ID", "")
+    IBKR_PAPER_TRADE:  bool  = os.getenv("IBKR_PAPER_TRADE", "true").lower() == "true"
 
     # ── Instrument ────────────────────────────────────────────────────────────
     SYMBOL: str = "SPY"

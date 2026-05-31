@@ -29,7 +29,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-ROOT = Path(__file__).resolve().parent
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPT_DIR.parent  # Go up from scripts/ to project root
 sys.path.insert(0, str(ROOT))
 
 # ── Load .env ──────────────────────────────────────────────────────────────────
@@ -486,7 +487,7 @@ def run(lookback_days: int = 365):
     }
 
     # ── Write output ──────────────────────────────────────────────────────────
-    out = ROOT / "CS_ALGOTRADER_APP" / "backtest_simulation.js"
+    out = ROOT / "dashboard" / "backtest_simulation.js"
     out.write_text(
         "window.BACKTEST_SIMULATION = " + json.dumps(payload, indent=2) + ";",
         encoding="utf-8",

@@ -5,13 +5,15 @@ import logging
 import requests
 from typing import Any
 
+from .broker_base import BaseBrokerClient
+
 log = logging.getLogger(__name__)
 
 _SANDBOX_URL = "https://sandbox.tradier.com/v1"
 _LIVE_URL    = "https://api.tradier.com/v1"
 
 
-class TradierClient:
+class TradierClient(BaseBrokerClient):
     """Thin wrapper around the Tradier REST API."""
 
     def __init__(self, token: str, account_id: str, paper: bool = True):
