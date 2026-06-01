@@ -5,6 +5,14 @@ Based on the Breakeven Iron Condor methodology targeting $200/day.
 import os
 from dataclasses import dataclass, field
 from typing import List
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file from project root
+_root = Path(__file__).resolve().parent.parent
+_env_path = _root / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path)
 
 
 @dataclass
