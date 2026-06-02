@@ -1240,7 +1240,8 @@ const _brokerAccounts = {
     win_rate: 0,
     avg_win: 0,
     total_pnl: -215.82,
-    trade_log: []  // Populated from D.trade_log on render
+    trade_log: [],  // Populated from D.trade_log on render
+    positions: []   // Populated from D.positions on render
   },
   ibkr: {
     name: 'Ruchika Dhawan',
@@ -1262,7 +1263,8 @@ const _brokerAccounts = {
     win_rate: 0,
     avg_win: 0,
     total_pnl: 0,
-    trade_log: []  // Empty for paper account
+    trade_log: [],  // Empty for paper account
+    positions: []   // Empty for paper account
   }
 };
 
@@ -1321,6 +1323,30 @@ function updateAccountDetails(broker) {
   $('ac-status').style.color = accountInfo.status === 'active' ? 'var(--tgreen)' : 'var(--yellow)';
 }
 
+function renderPositions(broker) {
+  const allPos = _brokerAccounts[broker].positions || [];
+  const pos = allPos.filter(p => p.symbol.startsWith('SPY') && p.symbol.length > 3);
+  $('pos-count').textContent = `${pos.length} SPY position${pos.length !== 1 ? 's' : ''}`;
+  $('pos-tbody').innerHTML = pos.length === 0
+    ? `<tr><td colspan="7" class="empty">No open SPY positions</td></tr>`
+    : pos.map(p => {
+        const info      = optionInfo(p.symbol);
+        const qty       = p.quantity;
+        const side      = qty >= 0 ? `<span class="badge badge-long">Long</span>` : `<span class="badge badge-short">Short</span>`;
+        const typeBadge = info.type === 'option'
+          ? `<span class="badge badge-option">${info.cp === 'C' ? 'Call' : 'Put'}</span>`
+          : `<span class="badge badge-equity">Equity</span>`;
+        return `<tr>
+          <td><span class="mono">${p.symbol}</span></td>
+          <td>${typeBadge}</td><td>${side}</td>
+          <td style="font-weight:700">${Math.abs(qty)}</td>
+          <td>$${fmt(Math.abs(p.cost_basis))}</td>
+          <td>$${qty !== 0 ? fmt(Math.abs(p.cost_basis / qty)) : '&mdash;'}</td>
+          <td style="color:var(--text-muted)">${dtFmt(p.date_acquired)}</td>
+        </tr>`;
+      }).join('');
+}
+
 function updateBrokerMetrics(broker) {
   const metrics = _brokerAccounts[broker] || _brokerAccounts['tradier'];
 
@@ -1343,6 +1369,9 @@ function updateBrokerMetrics(broker) {
   // Update historic trades for the selected broker
   const tradeLog = _brokerAccounts[broker].trade_log || [];
   renderHistoricTrades(tradeLog);
+
+  // Update open positions for the selected broker
+  renderPositions(broker);
 
   console.log('Dashboard metrics updated for broker:', broker);
 }
@@ -2552,7 +2581,13 @@ function render(D) {
   renderHistoricTrades(tradeLog);
 
   // Positions — SPY options only
-  const pos = (D.positions || []).filter(p => p.symbol.startsWith('SPY') && p.symbol.length > 3);
+  // Populate Tradier positions from API data on first render
+  if (_brokerAccounts.tradier.positions.length === 0 && D.positions) {
+    _brokerAccounts.tradier.positions = D.positions;
+  }
+  // Use broker-specific positions
+  const allPos = _brokerAccounts[_currentBroker].positions || [];
+  const pos = allPos.filter(p => p.symbol.startsWith('SPY') && p.symbol.length > 3);
   $('pos-count').textContent = `${pos.length} SPY position${pos.length !== 1 ? 's' : ''}`;
   $('pos-tbody').innerHTML   = pos.length === 0
     ? `<tr><td colspan="7" class="empty">No open SPY positions</td></tr>`
