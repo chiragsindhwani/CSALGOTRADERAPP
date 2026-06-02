@@ -2592,15 +2592,16 @@ window.addEventListener('DOMContentLoaded', () => {
       </div>`;
     return;
   }
+  // Broker toggle boot — MUST run BEFORE render() so _currentBroker is set
+  initBrokerToggle();
+
+  // Now render with correct broker already initialized
   render(window.TRADIER_DATA);
 
   // Strategy toggle boot
   const bootEnabled = getStrategyEnabled();
   applyStrategyState(bootEnabled);
   if (bootEnabled) startCountdown();
-
-  // Broker toggle boot
-  initBrokerToggle();
 
   // Redraw charts on window resize
   if (window.ResizeObserver) {
