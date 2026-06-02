@@ -112,8 +112,15 @@
     .toggle-strategy-lbl { font-size: 10px; color: var(--hdr-muted); font-weight: 600; white-space: nowrap; }
 
     /* ── Broker toggle (blue accent for IBKR) ───────────────────────────────── */
-    .strategy-toggle-wrap.ibkr     { border-color: rgba(88,166,255,.5); background: rgba(88,166,255,.08); }
+    .strategy-toggle-wrap.ibkr     { border-color: rgba(88,166,255,.5); background: rgba(88,166,255,.08); color: var(--hdr-text); }
+    .strategy-toggle-wrap.ibkr .toggle-status-lbl { color: #58a6ff !important; font-weight: 800; }
     .toggle-track.ibkr { background: #1a6fcf; }
+    .toggle-track.ibkr .toggle-knob { background: #fff; }
+
+    /* Broker toggle label visibility */
+    #broker-toggle-wrap .toggle-strategy-lbl { color: var(--hdr-text); font-weight: 600; }
+    #broker-toggle-wrap .toggle-status-lbl { color: var(--tgreen); font-weight: 800; }
+    #broker-toggle-wrap.ibkr .toggle-status-lbl { color: #58a6ff; }
 
     /* ── Broker toast notification ───────────────────────────────────────────── */
     #broker-toast {
