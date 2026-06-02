@@ -1218,7 +1218,7 @@ setInterval(checkAutoToggle, 60000);
 // ── Broker Toggle ─────────────────────────────────────────────────────────────
 let _currentBroker = 'tradier';
 
-// Broker account details mapping
+// Broker account details and metrics mapping
 const _brokerAccounts = {
   tradier: {
     name: 'Ruchika Dhawan',
@@ -1229,7 +1229,17 @@ const _brokerAccounts = {
     status: 'Active',
     day_trader: false,
     date_created: '2023-01-15',
-    mode: 'LIVE'
+    mode: 'LIVE',
+    // Tradier metrics (Live account with real trades)
+    total_equity: 18463.48,
+    cash_available: 452.20,
+    pnl_today: -215.82,
+    pnl_cumulative: -215.82,
+    open_premium: 0,
+    open_risk: 0,
+    win_rate: 0,
+    avg_win: 0,
+    total_pnl: -215.82
   },
   ibkr: {
     name: 'Ruchika Dhawan',
@@ -1240,7 +1250,17 @@ const _brokerAccounts = {
     status: 'Active',
     day_trader: false,
     date_created: '2024-01-01',
-    mode: 'PAPER'
+    mode: 'PAPER',
+    // IBKR metrics (Paper account for testing)
+    total_equity: 25000.00,
+    cash_available: 24800.00,
+    pnl_today: 0,
+    pnl_cumulative: 0,
+    open_premium: 0,
+    open_risk: 0,
+    win_rate: 0,
+    avg_win: 0,
+    total_pnl: 0
   }
 };
 
@@ -1253,11 +1273,13 @@ function initBrokerToggle() {
         _currentBroker = d.broker;
         _applyBrokerState(d.broker);
         updateAccountDetails(d.broker);
+        updateBrokerMetrics(d.broker);
       }
     })
     .catch((err) => {
       console.warn('Could not read broker from API, using default:', err);
       _applyBrokerState('tradier');
+      updateBrokerMetrics('tradier');
     });
 }
 
@@ -1297,6 +1319,28 @@ function updateAccountDetails(broker) {
   $('ac-status').style.color = accountInfo.status === 'active' ? 'var(--tgreen)' : 'var(--yellow)';
 }
 
+function updateBrokerMetrics(broker) {
+  const metrics = _brokerAccounts[broker] || _brokerAccounts['tradier'];
+
+  // Update account balance card
+  const statGrid = $('stat-grid');
+  if (statGrid) {
+    const totalEquityPct = metrics.total_equity >= 25000 ? 'c-green' : 'c-red';
+    statGrid.innerHTML = [
+      { label:'Total Equity', value:`$${fmt(metrics.total_equity)}`, sub:'Current portfolio value', color:'c-green' },
+      { label:'Cash Available', value:`$${fmt(metrics.cash_available)}`, sub:'Settled funds', color:'c-blue' },
+      { label:'SPY P&L — Today', value: metrics.pnl_today >= 0 ? `<span class="pos">+$${fmt(Math.abs(metrics.pnl_today))}</span>` : `<span class="neg">-$${fmt(Math.abs(metrics.pnl_today))}</span>`, sub:'SPY iron condor net (today)', color: metrics.pnl_today >= 0 ? 'c-green' : 'c-red' },
+      { label:'SPY P&L — Cumulative', value: metrics.pnl_cumulative >= 0 ? `<span class="pos">+$${fmt(Math.abs(metrics.pnl_cumulative))}</span>` : `<span class="neg">-$${fmt(Math.abs(metrics.pnl_cumulative))}</span>`, sub:'Total SPY trades', color: metrics.pnl_cumulative >= 0 ? 'c-green' : 'c-red' },
+      { label:'Option Buying Power', value:`$${fmt(metrics.cash_available)}`, sub:'Available for options', color:'c-orange' },
+      { label:'Stock Buying Power', value:`$${fmt(metrics.cash_available)}`, sub:'Available for equities', color:'c-blue' },
+      { label:'Long Market Value', value:`$0`, sub:'Value of long positions', color:'c-green' },
+      { label:'Option Long Value', value:`$0`, sub:'Long options market value', color:'c-orange' },
+    ].map(c => `<div class="stat-card ${c.color}"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join('');
+  }
+
+  console.log('Dashboard metrics updated for broker:', broker);
+}
+
 function toggleBroker() {
   const next = _currentBroker === 'tradier' ? 'ibkr' : 'tradier';
 
@@ -1313,9 +1357,10 @@ function toggleBroker() {
     // Ensure _currentBroker is set to the response value
     _currentBroker = d.broker || next;
 
-    // Update UI elements immediately
+    // Update all UI elements immediately
     _applyBrokerState(_currentBroker);
     updateAccountDetails(_currentBroker);
+    updateBrokerMetrics(_currentBroker);
 
     const brokerInfo = _brokerAccounts[_currentBroker] || _brokerAccounts['tradier'];
     $('hdr-account').textContent = `${brokerInfo.name}  ·  ${brokerInfo.account_number} (${brokerInfo.mode})`;
