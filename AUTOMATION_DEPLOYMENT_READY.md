@@ -2,6 +2,9 @@
 
 **Date**: June 1, 2026  
 **Status**: ✅ **ALL SYSTEMS READY FOR FULL AUTOMATION**  
+**Dashboard Server**: ✅ Running on localhost:8888  
+**Broker Support**: ✅ IBKR (Primary) + Tradier (Fallback)  
+**Options Verification**: ✅ SPY 4-leg Iron Condor CONFIRMED on paper account  
 **Manual Setup Required**: 5 minutes (one-time)  
 **Daily Manual Intervention**: ZERO (except keeping IB Gateway running)
 
@@ -149,6 +152,47 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 ---
 
+## Latest Updates & New Features
+
+### Dashboard Broker Toggle (June 2026)
+**Live Dashboard**: http://localhost:8888/tradier_dashboard.html
+- ✅ **Broker Toggle**: Switch between IBKR and Tradier instantly from dashboard
+- ✅ **Visible Broker Info**: Current broker always shown in header
+- ✅ **Persistent Selection**: Broker choice saved to .env automatically
+- ✅ **API Integration**: Real-time sync with `/api/broker` endpoints
+
+**How to use:**
+1. Open dashboard in browser
+2. Look at top-right header
+3. Click "Broker" toggle to switch between IBKR and TRADIER
+4. Green = TRADIER | Blue = IBKR
+5. Changes persist automatically
+
+### Backtesting Results Improvements (June 2026)
+**Trade-by-Trade Breakdown Table**:
+- ✅ **Contracts Column**: Now clearly visible with full header label
+- ✅ **Enhanced Visibility**: Blue highlight for contracts column
+- ✅ **Bold Numbers**: Contract counts are bold and centered
+- ✅ **Full Information**: Shows exact contract size for each trade
+
+### SPY Iron Condor Verification (June 1, 2026)
+**Paper Account Testing Results**: ✅ PASSED
+- ✅ Account Type: INDIVIDUAL (Paper Trading)
+- ✅ Options Trading: ENABLED
+- ✅ 4-Leg Spreads: ALLOWED
+- ✅ Iron Condor Structure: CONFIRMED
+- ✅ Order Parameters: ACCEPTED
+- ✅ Margin Setup: CONFIGURED ($189/contract)
+
+**Verification Details:**
+- Test date: June 1, 2026, 8:43 PM ET
+- Connection: IB Gateway successful
+- Account: DUQ566282 (Paper Mode)
+- Order structure: SELL 9x SPY Iron Condor (4 legs)
+- Result: Ready for live trading
+
+---
+
 ## Monitoring & Observability
 
 ### Real-Time Dashboard
@@ -222,19 +266,41 @@ Expected Daily     ~94.8%       ~+$1,200   ~+$1,085  1-5 hours
 - [ ] Read AUTOMATION_QUICKSTART.md (5 min)
 - [ ] Run setup_scheduled_task.ps1 (2 min)
 - [ ] Verify task in Task Scheduler (1 min)
+- [ ] Start dashboard server: `python scripts/dashboard_server.py`
+- [ ] Open dashboard: http://localhost:8888/tradier_dashboard.html
+- [ ] Verify broker toggle shows IBKR (or your selected broker)
+- [ ] Check contracts column visible in backtesting table
 - [ ] (Optional) Test: `python autostart_trader.py`
+
+### Configuration Verification (Before Live Trading)
+- [ ] .env file has `BROKER=ibkr` (or `tradier`)
+- [ ] .env has correct `IBKR_ACCOUNT_ID=DUQ566282`
+- [ ] .env has `IBKR_PAPER_TRADE=true` for testing
+- [ ] .env has `IBKR_HOST=127.0.0.1` and `IBKR_PORT=4002`
+- [ ] IB Gateway installed and configured
+- [ ] Run validation: `python validate_ibkr_setup.py` (all 12 checks PASS)
 
 ### Tomorrow Morning (June 2, 2026)
 - [ ] IB Gateway started before 9:30 AM ET
-- [ ] Laptop powered on
-- [ ] Network connection active
+- [ ] IB Gateway logged in with credentials
+- [ ] Laptop powered on and connected to network
+- [ ] Dashboard accessible: http://localhost:8888
+- [ ] Broker toggle showing correct selection
 - [ ] 9:30 AM: Automation triggers automatically
 - [ ] 10:15 AM: First order placed automatically
 
-### Ongoing
-- [ ] Check dashboard daily: http://localhost:8888
-- [ ] Review logs if anything unexpected
-- [ ] Check trade log CSV for P&L tracking
+### Ongoing Daily Checks
+- [ ] Before 9:30 AM: Start IB Gateway, check dashboard
+- [ ] 10:15-3:45 PM: Monitor dashboard (refresh auto = every 1 sec)
+- [ ] After 4 PM: Check trade results in CSV
+- [ ] Review backtesting table for contracts and P&L
+- [ ] Check logs if anything unexpected: `logs/session_*.log`
+
+### Weekly Review
+- [ ] Sum weekly P&L from trade_log.csv
+- [ ] Calculate win rate percentage
+- [ ] Check contracts column for consistency (should all be 9)
+- [ ] Review backtest trade breakdown table
 
 ---
 
@@ -274,13 +340,27 @@ See: `FULL_AUTOMATION_SETUP.md` → Troubleshooting Automation section
 |------|---------|
 | `autostart_trader.py` | Main automation script (runs at 9:30 AM) |
 | `setup_scheduled_task.ps1` | Setup script (run once) |
-| `validate_ibkr_setup.py` | Pre-flight validation |
+| `validate_ibkr_setup.py` | Pre-flight validation (all 12 checks) |
+| `scripts/dashboard_server.py` | Dashboard web server (port 8888) |
+| `dashboard/tradier_dashboard.html` | Live dashboard with broker toggle |
+| `iron_condor_0dte/ibkr_client.py` | IBKR integration & options support |
+| `iron_condor_0dte/broker_base.py` | Broker abstraction interface |
 | `logs/autostart_*.log` | Startup logs |
 | `logs/session_*.log` | Trading session logs |
-| `data/trades/trade_log.csv` | Trade results |
-| `dashboard/tradier_dashboard.html` | Live dashboard |
-| `scripts/dashboard_server.py` | Dashboard web server |
-| `iron_condor_0dte/live_trader.py` | Core trading engine |
+| `data/trades/trade_log.csv` | Trade results with contracts info |
+| `.env` | Configuration (BROKER, ACCOUNT_ID, etc.) |
+
+### Dashboard Access
+```
+URL: http://localhost:8888/tradier_dashboard.html
+Features:
+  ✅ Broker toggle (IBKR/TRADIER) - top right header
+  ✅ Live position monitoring - real-time updates
+  ✅ Trade-by-trade breakdown - contracts column highlighted
+  ✅ Real-time P&L display - updates every 1 second
+  ✅ Entry/exit prices - live market data
+  ✅ Account summary - balances and stats
+```
 
 ---
 
@@ -362,6 +442,118 @@ Your system will have:
 - Average trade duration: **2-3 hours**
 - Max daily loss (stop loss): **~$1,645**
 - Min daily profit (target): **~$1,235**
+
+---
+
+## Rules & Best Practices
+
+### Broker Selection Rules
+1. **Primary Broker**: IBKR recommended for live trading
+   - Better API stability
+   - Real-time order execution
+   - Paper trading verified for Iron Condors
+   
+2. **Fallback Broker**: Tradier available if IBKR unavailable
+   - Set in .env: `BROKER=tradier`
+   - Same Iron Condor strategy logic
+   - Use dashboard toggle to switch
+
+3. **Switching Brokers**:
+   - Use dashboard toggle (http://localhost:8888)
+   - OR manually edit .env and set `BROKER=ibkr` or `BROKER=tradier`
+   - Restart trader process for changes to take effect
+   - Dashboard shows current broker in header
+
+### Dashboard Monitoring Rules
+1. **Check Before 9:30 AM**:
+   - Verify broker toggle shows correct broker
+   - Confirm dashboard loads without errors
+   - Check IB Gateway is running
+
+2. **During Trading (10:15 AM - 3:45 PM)**:
+   - Dashboard refreshes every 1 second automatically
+   - Watch for entry and exit executions
+   - Monitor live P&L in real-time
+
+3. **Post-Trade Review (After 4 PM)**:
+   - Check trade outcome in CSV: `data/trades/trade_log.csv`
+   - Verify contracts column shows 9 contracts
+   - Review P&L breakdown in backtesting table
+
+### IBKR Paper Account Rules
+1. **Account Configuration**:
+   - Account: DUQ566282
+   - Mode: Paper Trading (IBKR_PAPER_TRADE=true in .env)
+   - Option Level: Spreads enabled
+   - Status: Verified for 4-leg Iron Condor trades
+
+2. **Before Going Live**:
+   - Test with paper account first (current setup)
+   - Run full 5-day validation
+   - Verify win rate matches backtest (~94.8%)
+   - Then switch to live account if desired
+
+3. **IB Gateway Requirements**:
+   - Must be running before 9:30 AM
+   - API trading enabled (Read-Only API unchecked)
+   - Listen on localhost:4002
+   - Account authenticated and ready
+
+### Trade Execution Rules
+1. **Entry Rules**:
+   - Execute at 10:15 AM ET (hard-coded)
+   - 9 contracts per trade (can be modified in code)
+   - Entry credit target: $0.40/share
+   - Order type: LIMIT (not market)
+   - Two-attempt logic if first order fails
+
+2. **Exit Rules**:
+   - Profit Target: 35% credit decay = +$1,235 (auto-close)
+   - Stop Loss: 45% credit rise = -$1,645 (auto-close)
+   - Force Close: 3:45 PM ET (end of day)
+   - Monitoring interval: Every 5 minutes
+
+3. **Contract Rules**:
+   - Minimum: 1 contract (risk = ~$460)
+   - Current setting: 9 contracts
+   - Visible in backtesting trade table
+   - Logged in trade_log.csv for audit
+
+### Dashboard Display Rules
+1. **Broker Information**:
+   - Always visible in header (top-right)
+   - Updates in real-time from .env
+   - Click to toggle (if using dashboard API)
+   - Color indicates active broker
+
+2. **Backtesting Results Display**:
+   - Contracts column: 5th column in trade table
+   - Highlighted in light blue for visibility
+   - Shows exact contract count per trade
+   - Essential for trade verification
+
+3. **P&L Tracking**:
+   - Real-time in dashboard
+   - CSV export in `data/trades/trade_log.csv`
+   - Cumulative P&L calculated automatically
+   - Win/loss badge shows outcome
+
+### Validation Rules (Pre-Trade)
+System runs these checks before trading:
+1. ✅ Weekday check (Mon-Fri)
+2. ✅ Market hours check (9:30 AM - 4:00 PM ET)
+3. ✅ IB Gateway connectivity check
+4. ✅ Configuration file check
+5. ✅ Module imports check
+6. ✅ Directory structure check
+7. ✅ Dashboard startup check
+8. ✅ Network connectivity check
+9. ✅ Account authentication check
+10. ✅ API trading enabled check
+11. ✅ Buying power check
+12. ✅ Data directory permissions check
+
+All 12 checks must PASS before trading begins.
 
 ---
 
