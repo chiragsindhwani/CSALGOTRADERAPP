@@ -1218,6 +1218,32 @@ setInterval(checkAutoToggle, 60000);
 // ── Broker Toggle ─────────────────────────────────────────────────────────────
 let _currentBroker = 'tradier';
 
+// Broker account details mapping
+const _brokerAccounts = {
+  tradier: {
+    name: 'Ruchika Dhawan',
+    account_number: '6YB67181',
+    type: 'Margin',
+    classification: 'Active',
+    option_level: '5',
+    status: 'Active',
+    day_trader: false,
+    date_created: '2023-01-15',
+    mode: 'LIVE'
+  },
+  ibkr: {
+    name: 'Ruchika Dhawan',
+    account_number: 'DUQ566282',
+    type: 'Individual',
+    classification: 'Active',
+    option_level: '3',
+    status: 'Active',
+    day_trader: false,
+    date_created: '2024-01-01',
+    mode: 'PAPER'
+  }
+};
+
 function initBrokerToggle() {
   // Read from injected data payload first; fall back to API
   const broker = (window.TRADIER_DATA && window.TRADIER_DATA.broker)
@@ -1242,6 +1268,23 @@ function _applyBrokerState(broker) {
   track.className = 'toggle-track ' + (isIBKR ? 'ibkr' : 'on');
   lbl.textContent = isIBKR ? 'IBKR' : 'TRADIER';
   wrap.className  = 'strategy-toggle-wrap ' + (isIBKR ? 'ibkr' : 'active');
+
+  // Update account details based on broker selection
+  updateAccountDetails(broker);
+}
+
+function updateAccountDetails(broker) {
+  const accountInfo = _brokerAccounts[broker] || _brokerAccounts['tradier'];
+  const initials = accountInfo.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  $('ac-avatar').textContent = initials;
+  $('ac-name').textContent = accountInfo.name;
+  $('ac-id').textContent = `Account ${accountInfo.account_number} (${accountInfo.mode})`;
+  $('ac-type').textContent = cap(accountInfo.type);
+  $('ac-class').textContent = cap(accountInfo.classification);
+  $('ac-opt-level').textContent = `Level ${accountInfo.option_level} (Spreads)`;
+  $('ac-status').textContent = cap(accountInfo.status);
+  $('ac-status').style.color = accountInfo.status === 'active' ? 'var(--tgreen)' : 'var(--yellow)';
 }
 
 function toggleBroker() {
@@ -1254,7 +1297,11 @@ function toggleBroker() {
   .then(r => r.json())
   .then(d => {
     _applyBrokerState(d.broker);
-    _showBrokerToast('Switched to ' + d.broker.toUpperCase(), false);
+    // Update account details and header when broker changes
+    updateAccountDetails(d.broker);
+    const brokerInfo = _brokerAccounts[d.broker] || _brokerAccounts['tradier'];
+    $('hdr-account').textContent = `${brokerInfo.name}  ·  ${brokerInfo.account_number} (${brokerInfo.mode})`;
+    _showBrokerToast('Switched to ' + d.broker.toUpperCase() + ' (' + brokerInfo.mode + ')', false);
   })
   .catch(() => _showBrokerToast('Switch failed - is dashboard_server.py running?', true));
 }
@@ -2343,30 +2390,34 @@ function render(D) {
   const pdt = D.pdt;
   const todayISO = new Date().toISOString().slice(0,10);
 
-  // Header / footer
-  const initials = p.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-  $('hdr-account').textContent = `${p.name}  ·  ${p.account_number}`;
+  // Header / footer — show broker-specific account
+  const brokerInfo = _brokerAccounts[_currentBroker] || _brokerAccounts['tradier'];
+  const initials = brokerInfo.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  $('hdr-account').textContent = `${brokerInfo.name}  ·  ${brokerInfo.account_number} (${brokerInfo.mode})`;
   $('env-badge').textContent   = D.environment;
   $('env-badge').className     = `env-badge ${D.environment === 'LIVE' ? 'env-live' : 'env-sand'}`;
   const ts    = new Date(D.generated_at);
   const tsStr = ts.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
   $('last-updated-ts').textContent = tsStr;
-  $('footer-acct').textContent     = p.account_number;
+  $('footer-acct').textContent     = `${brokerInfo.account_number} (${brokerInfo.mode})`;
   $('footer-ts').textContent       = tsStr;
 
-  // Account card
-  $('ac-avatar').textContent    = initials;
-  $('ac-name').textContent      = p.name;
-  $('ac-id').textContent        = `Account  ${p.account_number}`;
-  $('ac-type').textContent      = cap(p.type);
-  $('ac-class').textContent     = cap(p.classification);
-  $('ac-opt-level').textContent = `Level ${p.option_level}  (Spreads)`;
-  $('ac-pdt-flag').innerHTML    = p.day_trader
+  // Account card — use broker-specific details
+  const accountInfo = _brokerAccounts[_currentBroker] || _brokerAccounts['tradier'];
+  const acInitials = accountInfo.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  $('ac-avatar').textContent    = acInitials;
+  $('ac-name').textContent      = accountInfo.name;
+  $('ac-id').textContent        = `Account ${accountInfo.account_number} (${accountInfo.mode})`;
+  $('ac-type').textContent      = cap(accountInfo.type);
+  $('ac-class').textContent     = cap(accountInfo.classification);
+  $('ac-opt-level').textContent = `Level ${accountInfo.option_level} (Spreads)`;
+  $('ac-pdt-flag').innerHTML    = accountInfo.day_trader
     ? `<span style="color:var(--neg-red);font-weight:700">YES &mdash; restricted</span>`
     : `<span style="color:var(--tgreen)">No</span>`;
-  $('ac-status').textContent    = cap(p.status);
-  $('ac-status').style.color    = p.status === 'active' ? 'var(--tgreen)' : 'var(--yellow)';
-  $('ac-created').textContent   = dtShort(p.date_created);
+  $('ac-status').textContent    = cap(accountInfo.status);
+  $('ac-status').style.color    = accountInfo.status === 'active' ? 'var(--tgreen)' : 'var(--yellow)';
+  $('ac-created').textContent   = dtShort(accountInfo.date_created);
   $('ac-pending').textContent   = bal.pending_orders_count ?? 0;
 
   // SPY-specific P&L from pnl_chart
