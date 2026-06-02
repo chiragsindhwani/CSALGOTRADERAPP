@@ -1239,7 +1239,8 @@ const _brokerAccounts = {
     open_risk: 0,
     win_rate: 0,
     avg_win: 0,
-    total_pnl: -215.82
+    total_pnl: -215.82,
+    trade_log: []  // Populated from D.trade_log on render
   },
   ibkr: {
     name: 'Ruchika Dhawan',
@@ -1260,7 +1261,8 @@ const _brokerAccounts = {
     open_risk: 0,
     win_rate: 0,
     avg_win: 0,
-    total_pnl: 0
+    total_pnl: 0,
+    trade_log: []  // Empty for paper account
   }
 };
 
@@ -1337,6 +1339,10 @@ function updateBrokerMetrics(broker) {
       { label:'Option Long Value', value:`$0`, sub:'Long options market value', color:'c-orange' },
     ].map(c => `<div class="stat-card ${c.color}"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join('');
   }
+
+  // Update historic trades for the selected broker
+  const tradeLog = _brokerAccounts[broker].trade_log || [];
+  renderHistoricTrades(tradeLog);
 
   console.log('Dashboard metrics updated for broker:', broker);
 }
@@ -2537,7 +2543,13 @@ function render(D) {
   }).join('');
 
   // ── Historic trade log ───────────────────────────────────────────────────────
-  renderHistoricTrades(D.trade_log || []);
+  // Populate Tradier trade log from API data on first render
+  if (_brokerAccounts.tradier.trade_log.length === 0 && D.trade_log) {
+    _brokerAccounts.tradier.trade_log = D.trade_log;
+  }
+  // Use broker-specific trade logs
+  const tradeLog = _brokerAccounts[_currentBroker].trade_log || [];
+  renderHistoricTrades(tradeLog);
 
   // Positions — SPY options only
   const pos = (D.positions || []).filter(p => p.symbol.startsWith('SPY') && p.symbol.length > 3);
