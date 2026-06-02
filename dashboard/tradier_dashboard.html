@@ -518,6 +518,7 @@
   <div class="main-tab-bar">
     <button class="main-tab-btn active" data-tab="dashboard" onclick="showMainTab('dashboard')">Dashboard</button>
     <button class="main-tab-btn" data-tab="backtest" onclick="showMainTab('backtest')">Backtesting Results</button>
+    <button class="main-tab-btn" data-tab="strategy-rules" onclick="showMainTab('strategy-rules')">Strategy Rules</button>
   </div>
 
   <!-- ══ DASHBOARD PANEL ═══════════════════════════════════════════════════════ -->
@@ -757,6 +758,331 @@
     </div>
 
   </div><!-- /backtest-panel -->
+
+  <!-- ══ STRATEGY RULES PANEL ══════════════════════════════════════════════════ -->
+  <div id="strategy-rules-panel" style="display:none; padding:28px; max-width:1400px; margin:0 auto;">
+
+    <h2 style="font-size:20px; font-weight:800; color:#0f172a; margin-bottom:24px">SPY Iron Condor 0DTE Strategy Rules</h2>
+
+    <!-- Strategy Overview -->
+    <div class="bt-card">
+      <div class="bt-card-title"><span class="bt-icon">📋</span> Strategy Overview</div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Underlying</div>
+          <div class="bt-metric-desc">The security being traded</div>
+        </div>
+        <div class="bt-metric-value">SPY (S&P 500 ETF)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Strategy Type</div>
+          <div class="bt-metric-desc">4-leg iron condor spread</div>
+        </div>
+        <div class="bt-metric-value">0DTE (Same-Day Expiration)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Expiration</div>
+          <div class="bt-metric-desc">Contracts expire same trading day</div>
+        </div>
+        <div class="bt-metric-value">Daily at 4:00 PM ET</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Entry Time</div>
+          <div class="bt-metric-desc">When orders are placed</div>
+        </div>
+        <div class="bt-metric-value">10:15 AM ET (Fixed)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Exit Strategy</div>
+          <div class="bt-metric-desc">Automated exit conditions</div>
+        </div>
+        <div class="bt-metric-value">Profit Target OR Stop Loss</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Contracts Per Trade</div>
+          <div class="bt-metric-desc">Multi-contract spread size</div>
+        </div>
+        <div class="bt-metric-value">9 contracts (configurable)</div>
+      </div>
+    </div>
+
+    <!-- Entry Rules -->
+    <div class="bt-card">
+      <div class="bt-card-title"><span class="bt-icon">📥</span> Entry Rules</div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Time</div>
+          <div class="bt-metric-desc">Entry is placed at this fixed time</div>
+        </div>
+        <div class="bt-metric-value">10:15 AM Eastern Time</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Market Condition</div>
+          <div class="bt-metric-desc">Trading only during regular hours</div>
+        </div>
+        <div class="bt-metric-value">9:30 AM - 4:00 PM ET only</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Day of Week</div>
+          <div class="bt-metric-desc">Trading only on business days</div>
+        </div>
+        <div class="bt-metric-value">Monday - Friday (weekdays only)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Strike Selection</div>
+          <div class="bt-metric-desc">Delta target for short strikes</div>
+        </div>
+        <div class="bt-metric-value">0.15 delta (15 delta, OTM)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Wing Width</div>
+          <div class="bt-metric-desc">Distance between short and long strikes</div>
+        </div>
+        <div class="bt-metric-value">$5.00 wide</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Minimum Credit</div>
+          <div class="bt-metric-desc">Entry limit price (per share)</div>
+        </div>
+        <div class="bt-metric-value">$0.40 per share minimum</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Order Type</div>
+          <div class="bt-metric-desc">How orders are placed</div>
+        </div>
+        <div class="bt-metric-value">LIMIT orders (not market)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Entry Attempt Logic</div>
+          <div class="bt-metric-desc">Retry if first order fails</div>
+        </div>
+        <div class="bt-metric-value">Two-attempt order placement</div>
+      </div>
+    </div>
+
+    <!-- Exit Rules -->
+    <div class="bt-card">
+      <div class="bt-card-title"><span class="bt-icon">📤</span> Exit Rules (Automatic)</div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Profit Target</div>
+          <div class="bt-metric-desc">Exit when 35% of credit decays</div>
+        </div>
+        <div class="bt-metric-value">+$1,235 net P&L (for 9 contracts)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Profit Decay Threshold</div>
+          <div class="bt-metric-desc">Percentage of credit collected</div>
+        </div>
+        <div class="bt-metric-value">35% of entry credit</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Stop Loss</div>
+          <div class="bt-metric-desc">Exit when 45% of credit rises</div>
+        </div>
+        <div class="bt-metric-value">-$1,645 max loss (for 9 contracts)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Stop Loss Rise Threshold</div>
+          <div class="bt-metric-desc">Percentage of credit at risk</div>
+        </div>
+        <div class="bt-metric-value">45% of entry credit</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Force Close Time</div>
+          <div class="bt-metric-desc">Close all positions at end of day</div>
+        </div>
+        <div class="bt-metric-value">3:45 PM ET (hard stop)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Position Monitoring</div>
+          <div class="bt-metric-desc">How often P&L is checked</div>
+        </div>
+        <div class="bt-metric-value">Every 5 minutes during trading</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Exit Order Type</div>
+          <div class="bt-metric-desc">How positions are closed</div>
+        </div>
+        <div class="bt-metric-value">Market orders (immediate fill)</div>
+      </div>
+    </div>
+
+    <!-- Risk Management Rules -->
+    <div class="bt-card">
+      <div class="bt-card-title"><span class="bt-icon">⚠️</span> Risk Management Rules</div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Maximum Risk Per Trade</div>
+          <div class="bt-metric-desc">Stop loss defines max loss</div>
+        </div>
+        <div class="bt-metric-value">$1,645 (for 9 contracts)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Risk-to-Reward Ratio</div>
+          <div class="bt-metric-desc">Profit target vs stop loss</div>
+        </div>
+        <div class="bt-metric-value">1:1.33 (favorable)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Maximum Trade Duration</div>
+          <div class="bt-metric-desc">Hold time before force close</div>
+        </div>
+        <div class="bt-metric-value">Up to 5.5 hours (10:15 AM - 3:45 PM)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Post-Fill Viability Check</div>
+          <div class="bt-metric-desc">Abort if actual credit too low</div>
+        </div>
+        <div class="bt-metric-value">Minimum $0.10 per share received</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">VIX Filter</div>
+          <div class="bt-metric-desc">Skip if volatility too high</div>
+        </div>
+        <div class="bt-metric-value">Maximum VIX = 30.0</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">FOMC Skip Days</div>
+          <div class="bt-metric-desc">Skip Federal Reserve announcement days</div>
+        </div>
+        <div class="bt-metric-value">8 dates per year (configurable)</div>
+      </div>
+    </div>
+
+    <!-- PDT Rules -->
+    <div class="bt-card">
+      <div class="bt-card-title"><span class="bt-icon">📊</span> PDT (Pattern Day Trader) Rules</div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Maximum Day Trades</div>
+          <div class="bt-metric-desc">Per rolling 5-business-day window</div>
+        </div>
+        <div class="bt-metric-value">3 round-trips maximum</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Minimum Account Balance</div>
+          <div class="bt-metric-desc">Required by SEC for day trading</div>
+        </div>
+        <div class="bt-metric-value">$25,000 (not enforced if < $25k)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Counting Method</div>
+          <div class="bt-metric-desc">Each entry + exit = 1 day trade</div>
+        </div>
+        <div class="bt-metric-value">Iron Condor = 2 day trades</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Daily Limit</div>
+          <div class="bt-metric-desc">Maximum trades per day</div>
+        </div>
+        <div class="bt-metric-value">1 trade per day (1 Iron Condor)</div>
+      </div>
+    </div>
+
+    <!-- Broker Rules -->
+    <div class="bt-card">
+      <div class="bt-card-title"><span class="bt-icon">🏦</span> Broker Configuration Rules</div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Supported Brokers</div>
+          <div class="bt-metric-desc">Which brokers can execute strategy</div>
+        </div>
+        <div class="bt-metric-value">IBKR (IB Gateway) & Tradier</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">API Connection</div>
+          <div class="bt-metric-desc">How system connects to broker</div>
+        </div>
+        <div class="bt-metric-value">IBKR via IB Gateway, Tradier via REST</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Trading Account Type</div>
+          <div class="bt-metric-desc">Paper or live trading</div>
+        </div>
+        <div class="bt-metric-value">Both supported (configurable)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Required API Permissions</div>
+          <div class="bt-metric-desc">Broker permissions needed</div>
+        </div>
+        <div class="bt-metric-value">Read + Write (trading orders required)</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">Commission Structure</div>
+          <div class="bt-metric-desc">Estimated per-trade costs</div>
+        </div>
+        <div class="bt-metric-value">~$25 per trade (broker-dependent)</div>
+      </div>
+    </div>
+
+    <!-- Pre-Trade Validation -->
+    <div class="bt-card">
+      <div class="bt-card-title"><span class="bt-icon">✓</span> Pre-Trade Validation Checks</div>
+      <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px; line-height: 1.6;">
+        System runs 12 validation checks before any trade execution. ALL must pass:
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">[1] Weekday Check</div>
+          <div class="bt-metric-desc">Only trade Monday-Friday</div>
+        </div>
+        <div class="bt-metric-value neutral">Required to PASS</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">[2] Market Hours Check</div>
+          <div class="bt-metric-desc">9:30 AM - 4:00 PM ET</div>
+        </div>
+        <div class="bt-metric-value neutral">Required to PASS</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">[3] Broker Connectivity</div>
+          <div class="bt-metric-desc">API connection to broker works</div>
+        </div>
+        <div class="bt-metric-value neutral">Required to PASS</div>
+      </div>
+      <div class="bt-metric-row">
+        <div class="bt-metric-left">
+          <div class="bt-metric-name">[4-12] Other Checks</div>
+          <div class="bt-metric-desc">Config, imports, files, auth, buying power, etc.</div>
+        </div>
+        <div class="bt-metric-value neutral">All Required to PASS</div>
+      </div>
+    </div>
+
+  </div><!-- /strategy-rules-panel -->
 
 </div><!-- /main-wrap -->
 
@@ -1546,8 +1872,9 @@ function renderHistoricTrades(trades) {
 // ── Tab navigation ────────────────────────────────────────────────────────────
 function showMainTab(tab) {
   document.querySelectorAll('.main-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  document.getElementById('dashboard-panel').style.display = tab === 'dashboard' ? '' : 'none';
-  document.getElementById('backtest-panel').style.display  = tab === 'backtest'  ? '' : 'none';
+  document.getElementById('dashboard-panel').style.display       = tab === 'dashboard'       ? '' : 'none';
+  document.getElementById('backtest-panel').style.display        = tab === 'backtest'        ? '' : 'none';
+  document.getElementById('strategy-rules-panel').style.display  = tab === 'strategy-rules'  ? '' : 'none';
 }
 
 // ── Backtest computation ───────────────────────────────────────────────────────
