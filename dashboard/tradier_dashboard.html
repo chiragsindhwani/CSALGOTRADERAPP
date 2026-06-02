@@ -2561,14 +2561,19 @@ function render(D) {
         </tr>`;
       }).join('');
 
-  // ── Performance panel ──────────────────────────────────────────────────────
-  const stats = computePerfStats(D);
-  renderBigMetric(D, _currentWeight);
+  // ── Performance panel ─────────────────────────────────────────────────────
+  // Use broker-specific data or API data based on current broker
+  const performanceData = _currentBroker === 'ibkr'
+    ? { pnl_chart: [], positions: [], trade_log: [] }  // Empty for IBKR paper account
+    : D;  // Real data for Tradier
+
+  const stats = computePerfStats(performanceData);
+  renderBigMetric(performanceData, _currentWeight);
   renderPerfStats(stats);
-  renderMonthlyChart(D, _currentView, _currentWeight);
+  renderMonthlyChart(performanceData, _currentView, _currentWeight);
 
   // ── Backtesting panel ───────────────────────────────────────────────────────
-  renderBacktest(D);
+  renderBacktest(performanceData);
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
