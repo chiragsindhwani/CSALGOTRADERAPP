@@ -1245,32 +1245,42 @@ const _brokerAccounts = {
 };
 
 function initBrokerToggle() {
-  // Read from injected data payload first; fall back to API
-  const broker = (window.TRADIER_DATA && window.TRADIER_DATA.broker)
-    ? window.TRADIER_DATA.broker
-    : 'tradier';
-  _applyBrokerState(broker);
-
-  // Sync with server in case .env changed externally
+  // Always fetch from server to get current .env value
   fetch('/api/broker')
     .then(r => r.json())
-    .then(d => _applyBrokerState(d.broker))
-    .catch(() => {});
+    .then(d => {
+      if (d.broker) {
+        _currentBroker = d.broker;
+        _applyBrokerState(d.broker);
+        updateAccountDetails(d.broker);
+      }
+    })
+    .catch((err) => {
+      console.warn('Could not read broker from API, using default:', err);
+      _applyBrokerState('tradier');
+    });
 }
 
 function _applyBrokerState(broker) {
-  _currentBroker = broker;
-  const isIBKR = broker === 'ibkr';
+  // Ensure _currentBroker is always updated
+  _currentBroker = broker || 'tradier';
+
+  const isIBKR = _currentBroker === 'ibkr';
   const track  = $('broker-track');
   const lbl    = $('broker-lbl');
   const wrap   = $('broker-toggle-wrap');
+
   if (!track) return;
+
+  // Update toggle appearance
   track.className = 'toggle-track ' + (isIBKR ? 'ibkr' : 'on');
   lbl.textContent = isIBKR ? 'IBKR' : 'TRADIER';
   wrap.className  = 'strategy-toggle-wrap ' + (isIBKR ? 'ibkr' : 'active');
 
   // Update account details based on broker selection
-  updateAccountDetails(broker);
+  updateAccountDetails(_currentBroker);
+
+  console.log('Broker state updated to:', _currentBroker);
 }
 
 function updateAccountDetails(broker) {
@@ -1289,6 +1299,10 @@ function updateAccountDetails(broker) {
 
 function toggleBroker() {
   const next = _currentBroker === 'tradier' ? 'ibkr' : 'tradier';
+
+  // Update broker state immediately for UI responsiveness
+  _currentBroker = next;
+
   fetch('/api/set-broker', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1296,14 +1310,23 @@ function toggleBroker() {
   })
   .then(r => r.json())
   .then(d => {
-    _applyBrokerState(d.broker);
-    // Update account details and header when broker changes
-    updateAccountDetails(d.broker);
-    const brokerInfo = _brokerAccounts[d.broker] || _brokerAccounts['tradier'];
+    // Ensure _currentBroker is set to the response value
+    _currentBroker = d.broker || next;
+
+    // Update UI elements immediately
+    _applyBrokerState(_currentBroker);
+    updateAccountDetails(_currentBroker);
+
+    const brokerInfo = _brokerAccounts[_currentBroker] || _brokerAccounts['tradier'];
     $('hdr-account').textContent = `${brokerInfo.name}  ·  ${brokerInfo.account_number} (${brokerInfo.mode})`;
-    _showBrokerToast('Switched to ' + d.broker.toUpperCase() + ' (' + brokerInfo.mode + ')', false);
+    $('footer-acct').textContent = `${brokerInfo.account_number} (${brokerInfo.mode})`;
+
+    _showBrokerToast('Switched to ' + _currentBroker.toUpperCase() + ' (' + brokerInfo.mode + ')', false);
   })
-  .catch(() => _showBrokerToast('Switch failed - is dashboard_server.py running?', true));
+  .catch((err) => {
+    console.error('Broker switch error:', err);
+    _showBrokerToast('Switch failed - is dashboard_server.py running?', true);
+  });
 }
 
 function _showBrokerToast(msg, isError) {
