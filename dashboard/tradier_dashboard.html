@@ -2502,16 +2502,18 @@ function render(D) {
     : `<span style="color:var(--text-muted);font-size:14px">No trade</span>`;
   const spyCumVal     = `<span class="${spyCumCls}">${spyCumNet >= 0 ? '+' : '-'}$${fmt(Math.abs(spyCumNet))}</span>`;
 
-  // Stat cards
+  // Stat cards — use broker-specific metrics if available
+  const brokerMetrics = _brokerAccounts[_currentBroker] || { total_equity: bal.total_equity, cash_available: bal.total_cash };
+
   $('stat-grid').innerHTML = [
-    { label:'Total Equity',          value:`$${fmt(bal.total_equity)}`,        sub:'Current portfolio value',         color:'c-green' },
-    { label:'Cash Available',        value:`$${fmt(bal.total_cash)}`,           sub:'Settled funds',                   color:'c-blue' },
-    { label:'SPY P&L — Today',       value: spyTodayVal,                        sub:'SPY iron condor net (today)',      color: spyTodayNet != null ? (spyTodayNet  >= 0 ? 'c-green' : 'c-red') : '' },
-    { label:'SPY P&L — Cumulative',  value: spyCumVal,                          sub:`${spyTradeDays} trade day${spyTradeDays !== 1 ? 's' : ''} since live start`, color: spyCumNet >= 0 ? 'c-green' : 'c-red' },
-    { label:'Option Buying Power',   value:`$${fmt(bal.option_buying_power)}`,  sub:'Available for options',           color:'c-orange' },
-    { label:'Stock Buying Power',    value:`$${fmt(bal.stock_buying_power)}`,   sub:'Available for equities',          color:'c-blue' },
-    { label:'Long Market Value',     value:`$${fmt(bal.long_market_value)}`,    sub:'Value of long positions',         color:'c-green' },
-    { label:'Option Long Value',     value:`$${fmt(bal.option_long_value)}`,    sub:'Long options market value',       color:'c-orange' },
+    { label:'Total Equity',          value:`$${fmt(brokerMetrics.total_equity)}`,        sub:'Current portfolio value',         color:'c-green' },
+    { label:'Cash Available',        value:`$${fmt(brokerMetrics.cash_available)}`,      sub:'Settled funds',                   color:'c-blue' },
+    { label:'SPY P&L — Today',       value: brokerMetrics.pnl_today >= 0 ? `<span class="pos">+$${fmt(Math.abs(brokerMetrics.pnl_today))}</span>` : `<span class="neg">-$${fmt(Math.abs(brokerMetrics.pnl_today))}</span>`, sub:'SPY iron condor net (today)', color: brokerMetrics.pnl_today >= 0 ? 'c-green' : 'c-red' },
+    { label:'SPY P&L — Cumulative',  value: brokerMetrics.pnl_cumulative >= 0 ? `<span class="pos">+$${fmt(Math.abs(brokerMetrics.pnl_cumulative))}</span>` : `<span class="neg">-$${fmt(Math.abs(brokerMetrics.pnl_cumulative))}</span>`, sub:'Based on broker account', color: brokerMetrics.pnl_cumulative >= 0 ? 'c-green' : 'c-red' },
+    { label:'Option Buying Power',   value:`$${fmt(brokerMetrics.cash_available)}`,     sub:'Available for options',           color:'c-orange' },
+    { label:'Stock Buying Power',    value:`$${fmt(brokerMetrics.cash_available)}`,     sub:'Available for equities',          color:'c-blue' },
+    { label:'Long Market Value',     value:`$0`,                                        sub:'Value of long positions',         color:'c-green' },
+    { label:'Option Long Value',     value:`$0`,                                        sub:'Long options market value',       color:'c-orange' },
   ].map(c => `<div class="stat-card ${c.color}"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join('');
 
   // PDT Tracker
