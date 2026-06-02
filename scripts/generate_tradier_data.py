@@ -449,7 +449,7 @@ payload = {
 }
 
 # ── Write JS file ──────────────────────────────────────────────────────────────
-out_path = _ROOT / "CS_ALGOTRADER_APP" / "tradier_account_data.js"
+out_path = _ROOT / "dashboard" / "tradier_account_data.js"
 out_path.write_text(
     "window.TRADIER_DATA = " + json.dumps(payload, indent=2) + ";",
     encoding="utf-8",
