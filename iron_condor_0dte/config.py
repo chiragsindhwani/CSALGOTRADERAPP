@@ -37,9 +37,9 @@ class Config:
     ACCOUNT_SIZE: float = 25_000.0   # paper trading account size
 
     # ── Strike Selection ──────────────────────────────────────────────────────
-    TARGET_DELTA: float = 0.15       # short strikes at ~15 delta (OTM)
+    TARGET_DELTA: float = 0.20       # short strikes at ~20 delta (OTM) — better liquidity for entry
     WING_WIDTH: float   = 5.0        # $5-wide spreads — wider wings = more credit on 0DTE
-    MIN_CREDIT: float        = 0.40   # limit-order credit floor for entry (per share)
+    MIN_CREDIT: float        = 0.35   # limit-order credit floor for entry (per share) — more achievable for 0DTE
     MIN_ACTUAL_CREDIT: float = 0.10   # post-fill abort threshold — if actual fill < this, exit immediately
 
     # ── Timing (Eastern Time) ─────────────────────────────────────────────────
