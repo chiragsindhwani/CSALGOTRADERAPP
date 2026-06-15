@@ -283,6 +283,85 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 LIVE_OPTIONS_CACHE["data"] = data
                 LIVE_OPTIONS_CACHE["timestamp"] = now
                 self._json(200, data)
+        elif self.path == "/api/account-info":
+            # Get IBKR account info
+            try:
+                from iron_condor_0dte.ibkr_client import IBKRClient
+                from iron_condor_0dte.config import Config
+
+                cfg = Config()
+                client = IBKRClient(
+                    host=cfg.IBKR_HOST,
+                    port=7497,
+                    client_id=101,
+                    account_id=cfg.IBKR_ACCOUNT_ID,
+                    paper=cfg.PAPER_TRADE
+                )
+
+                profile = client.get_profile()
+                client.disconnect()
+
+                self._json(200, {
+                    "account": profile.get("profile", {}),
+                    "account_type": "IBKR Paper Trading",
+                    "trading_type": "Options",
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception as e:
+                self._json(200, {"error": str(e), "timestamp": datetime.now().isoformat()})
+        elif self.path == "/api/historic-trades":
+            # Get historic trades from CSV files
+            try:
+                import glob
+                import csv
+
+                trades_dir = Path(ROOT) / "trades"
+                csv_files = sorted(glob.glob(str(trades_dir / "trade_log_*.csv")))
+
+                trades = []
+                for csv_file in csv_files:
+                    try:
+                        with open(csv_file, 'r', encoding='utf-8') as f:
+                            reader = csv.DictReader(f)
+                            for row in reader:
+                                if row.get('outcome') and row['outcome'] != 'skipped_attempt_0':
+                                    trades.append(row)
+                    except:
+                        pass
+
+                # Sort by date descending (newest first)
+                trades.sort(key=lambda x: x.get('date', ''), reverse=True)
+
+                self._json(200, {
+                    "trades": trades[:100],  # Last 100 trades
+                    "count": len(trades),
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception as e:
+                self._json(200, {"trades": [], "count": 0, "error": str(e), "timestamp": datetime.now().isoformat()})
+        elif self.path == "/api/open-positions":
+            # Get open positions
+            try:
+                # Load from tradier_account_data.js if available
+                data_file = Path(DASHBOARD_DIR) / "tradier_account_data.js"
+                if data_file.exists():
+                    content = data_file.read_text(encoding='utf-8')
+                    # Extract JSON from window.TRADIER_DATA = {...}
+                    if 'window.TRADIER_DATA = ' in content:
+                        json_str = content.split('window.TRADIER_DATA = ', 1)[1].rstrip(';')
+                        data = json.loads(json_str)
+                        positions = data.get('positions', [])
+                        self._json(200, {
+                            "positions": positions,
+                            "count": len(positions),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                    else:
+                        self._json(200, {"positions": [], "count": 0, "timestamp": datetime.now().isoformat()})
+                else:
+                    self._json(200, {"positions": [], "count": 0, "timestamp": datetime.now().isoformat()})
+            except Exception as e:
+                self._json(200, {"positions": [], "count": 0, "error": str(e), "timestamp": datetime.now().isoformat()})
         else:
             super().do_GET()
 

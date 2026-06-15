@@ -517,7 +517,7 @@
 
   <!-- ══ MAIN TAB BAR ══════════════════════════════════════════════════════════ -->
   <div class="main-tab-bar">
-    <button class="main-tab-btn active" data-tab="dashboard" onclick="showMainTab('dashboard')">Dashboard</button>
+    <button class="main-tab-btn active" data-tab="dashboard" onclick="showMainTab('dashboard')">Performance</button>
     <button class="main-tab-btn" data-tab="livetrade" onclick="showMainTab('livetrade')">Live Trade</button>
     <button class="main-tab-btn" data-tab="backtest" onclick="showMainTab('backtest')">Backtesting Results</button>
     <button class="main-tab-btn" data-tab="strategy-rules" onclick="showMainTab('strategy-rules')">Strategy Rules</button>
@@ -2126,11 +2126,16 @@ function showMainTab(tab) {
   document.getElementById('livetrade-panel').style.display       = tab === 'livetrade'      ? '' : 'none';
   document.getElementById('strategy-rules-panel').style.display  = tab === 'strategy-rules'  ? '' : 'none';
 
-  // Start/stop live data refresh based on tab
-  if (tab === 'livetrade') {
+  // Start/stop auto-refresh based on tab
+  if (tab === 'dashboard') {
+    startPerformanceRefresh();
+    stopLiveDataRefresh();
+  } else if (tab === 'livetrade') {
     startLiveDataRefresh();
+    stopPerformanceRefresh();
   } else {
     stopLiveDataRefresh();
+    stopPerformanceRefresh();
   }
 }
 
@@ -2882,6 +2887,103 @@ function stopLiveDataRefresh() {
     clearInterval(liveDataRefreshTimer);
     liveDataRefreshTimer = null;
     console.log('Live data auto-refresh stopped');
+  }
+}
+
+// ── Performance Tab Auto-Refresh ───────────────────────────────────────────────
+
+let performanceRefreshTimer = null;
+
+/** Refresh Performance tab data (account info, trades, positions) */
+async function refreshPerformanceData() {
+  try {
+    // Fetch account info
+    const acctResp = await fetch('/api/account-info');
+    const acctData = await acctResp.json();
+    if (acctData.account) {
+      document.getElementById('ac-name').textContent = acctData.account.name || 'IBKR Account';
+      document.getElementById('ac-id').textContent = acctData.account.number || '—';
+      document.getElementById('ac-type').textContent = acctData.account_type || 'Paper Trading';
+      document.getElementById('ac-status').textContent = 'Active';
+    }
+
+    // Fetch historic trades
+    const tradesResp = await fetch('/api/historic-trades');
+    const tradesData = await tradesResp.json();
+    if (tradesData.trades && tradesData.trades.length > 0) {
+      let html = '';
+      tradesData.trades.forEach((trade, idx) => {
+        const outcome = trade.outcome || '—';
+        const outcomeClass = outcome.includes('profit') ? 'tgreen' : (outcome.includes('loss') ? 'red' : 'text-muted');
+        const netPnL = parseFloat(trade.net_pnl) || 0;
+        const netPnLStr = netPnL >= 0 ? `+$${netPnL.toFixed(2)}` : `-$${Math.abs(netPnL).toFixed(2)}`;
+
+        html += `<tr>
+          <td>${tradesData.count - idx}</td>
+          <td>${trade.date || '—'}</td>
+          <td><span style="color:var(--${outcomeClass})">${outcome}</span></td>
+          <td>${trade.short_call || '—'}-${trade.short_put || '—'}</td>
+          <td>${trade.contracts || 1}</td>
+          <td>$${trade.wing_width || 5}</td>
+          <td>$${trade.entry_credit || '—'}</td>
+          <td>$${trade.exit_cost || '—'}</td>
+          <td>$${trade.gross_pnl || '—'}</td>
+          <td>$${trade.commission || 0}</td>
+          <td style="font-weight:600; color:var(--${netPnL >= 0 ? 'tgreen' : 'red'})">${netPnLStr}</td>
+          <td>$${trade.cumulative_pnl || '—'}</td>
+          <td>${trade.spy_price_entry || '—'}</td>
+          <td>${trade.entry_time || '—'}</td>
+          <td>${trade.exit_time || '—'}</td>
+          <td style="font-size:11px">${trade.notes || '—'}</td>
+        </tr>`;
+      });
+      document.getElementById('hist-tbody').innerHTML = html;
+      document.getElementById('hist-count').textContent = `${tradesData.count} trades`;
+    }
+
+    // Fetch open positions
+    const posResp = await fetch('/api/open-positions');
+    const posData = await posResp.json();
+    if (posData.positions && posData.positions.length > 0) {
+      let html = '';
+      posData.positions.forEach(pos => {
+        html += `<tr>
+          <td>${pos.symbol || '—'}</td>
+          <td>${pos.type || 'Option'}</td>
+          <td>${pos.side || '—'}</td>
+          <td>${pos.quantity || 0}</td>
+          <td>$${pos.cost_basis?.toFixed(2) || '—'}</td>
+          <td>$${pos.cost_per_share?.toFixed(2) || '—'}</td>
+          <td>${pos.date_acquired || '—'}</td>
+        </tr>`;
+      });
+      document.getElementById('pos-tbody').innerHTML = html;
+      document.getElementById('pos-count').textContent = `${posData.count} positions`;
+    }
+
+  } catch (err) {
+    console.error('Performance data refresh error:', err);
+  }
+}
+
+/** Start 5-minute auto-refresh for Performance tab */
+function startPerformanceRefresh() {
+  // Refresh immediately
+  refreshPerformanceData();
+
+  // Then refresh every 5 minutes
+  if (performanceRefreshTimer) clearInterval(performanceRefreshTimer);
+  performanceRefreshTimer = setInterval(refreshPerformanceData, 300000);  // 5 minutes
+
+  console.log('Performance data auto-refresh started (every 5 minutes)');
+}
+
+/** Stop Performance tab auto-refresh */
+function stopPerformanceRefresh() {
+  if (performanceRefreshTimer) {
+    clearInterval(performanceRefreshTimer);
+    performanceRefreshTimer = null;
+    console.log('Performance data auto-refresh stopped');
   }
 }
 
