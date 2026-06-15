@@ -518,6 +518,7 @@
   <!-- ══ MAIN TAB BAR ══════════════════════════════════════════════════════════ -->
   <div class="main-tab-bar">
     <button class="main-tab-btn active" data-tab="dashboard" onclick="showMainTab('dashboard')">Dashboard</button>
+    <button class="main-tab-btn" data-tab="livetrade" onclick="showMainTab('livetrade')">Live Trade</button>
     <button class="main-tab-btn" data-tab="backtest" onclick="showMainTab('backtest')">Backtesting Results</button>
     <button class="main-tab-btn" data-tab="strategy-rules" onclick="showMainTab('strategy-rules')">Strategy Rules</button>
   </div>
@@ -759,6 +760,85 @@
     </div>
 
   </div><!-- /backtest-panel -->
+
+  <!-- ══ LIVE TRADE PANEL ══════════════════════════════════════════════════════ -->
+  <div id="livetrade-panel" style="display:none; padding:28px; max-width:1600px; margin:0 auto;">
+
+    <!-- Header row -->
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; gap:16px; flex-wrap:wrap">
+      <div>
+        <h2 style="font-size:20px; font-weight:800; color:#0f172a; margin-bottom:6px">Live Trade Monitor</h2>
+        <p style="font-size:13px; color:#64748b; margin-bottom:4px">
+          SPY 0DTE Options Chain &nbsp;·&nbsp;
+          <span id="lt-last-refresh" style="font-weight:600;color:#2563eb">—</span>
+        </p>
+      </div>
+      <button onclick="refreshLiveData()" style="background:#2563eb; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:opacity .15s">⟳ Refresh</button>
+    </div>
+
+    <!-- SPY Options Chain Table -->
+    <div class="table-card">
+      <div class="table-card-header">
+        <h3>SPY 0DTE Options Chain - All Strikes</h3>
+        <span class="tcount" id="lt-chain-count">0 strikes</span>
+      </div>
+      <div style="overflow-x:auto; max-height:500px; overflow-y:auto">
+        <table>
+          <thead style="position:sticky; top:0; background:#fff; z-index:10">
+            <tr>
+              <th>Strike</th>
+              <th>Call Bid</th>
+              <th>Call Ask</th>
+              <th>Call IV</th>
+              <th>Call Delta</th>
+              <th>Call Gamma</th>
+              <th>Call Theta</th>
+              <th>Call Vega</th>
+              <th>Put Bid</th>
+              <th>Put Ask</th>
+              <th>Put IV</th>
+              <th>Put Delta</th>
+              <th>Put Gamma</th>
+              <th>Put Theta</th>
+              <th>Put Vega</th>
+            </tr>
+          </thead>
+          <tbody id="lt-chain-tbody">
+            <tr><td colspan="15" class="empty">Loading market data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Active Positions -->
+    <div class="table-card" style="margin-top:24px">
+      <div class="table-card-header">
+        <h3>Active Positions</h3>
+        <span class="tcount" id="lt-position-count">0 positions</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Position</th>
+              <th>Type</th>
+              <th>Strike</th>
+              <th>Qty</th>
+              <th>Entry Price</th>
+              <th>Current Price</th>
+              <th>Unrealized P&L</th>
+              <th>Greeks (Delta/Gamma/Theta/Vega)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="lt-position-tbody">
+            <tr><td colspan="9" class="empty">No active positions</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /livetrade-panel -->
 
   <!-- ══ STRATEGY RULES PANEL ══════════════════════════════════════════════════ -->
   <div id="strategy-rules-panel" style="display:none; padding:28px; max-width:1400px; margin:0 auto;">
@@ -2028,7 +2108,9 @@ function showMainTab(tab) {
   document.querySelectorAll('.main-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('dashboard-panel').style.display       = tab === 'dashboard'       ? '' : 'none';
   document.getElementById('backtest-panel').style.display        = tab === 'backtest'        ? '' : 'none';
+  document.getElementById('livetrade-panel').style.display       = tab === 'livetrade'      ? '' : 'none';
   document.getElementById('strategy-rules-panel').style.display  = tab === 'strategy-rules'  ? '' : 'none';
+  if (tab === 'livetrade') refreshLiveData();
 }
 
 // ── Backtest computation ───────────────────────────────────────────────────────
@@ -2625,6 +2707,120 @@ function render(D) {
 
   // ── Backtesting panel ───────────────────────────────────────────────────────
   renderBacktest(performanceData);
+}
+
+// ── Live Trade Tab Functions ──────────────────────────────────────────────────
+
+/** Fetch live SPY options data and active positions */
+async function refreshLiveData() {
+  try {
+    const now = new Date();
+    const dateStr = now.toLocaleString('en-US', {
+      month: '2-digit', day: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    document.getElementById('lt-last-refresh').textContent = dateStr;
+
+    // Fetch live SPY options chain
+    const chainResp = await fetch('https://query2.finance.yahoo.com/v10/finance/quoteSummary/SPY?modules=optionChain');
+    if (!chainResp.ok) throw new Error(`API error: ${chainResp.status}`);
+
+    const data = await chainResp.json();
+    const optionChain = data?.quoteSummary?.result?.[0]?.optionChain?.result?.[0];
+
+    if (!optionChain?.options?.length) {
+      document.getElementById('lt-chain-tbody').innerHTML = '<tr><td colspan="15" class="empty">No options data available</td></tr>';
+      document.getElementById('lt-chain-count').textContent = '0 strikes';
+      return;
+    }
+
+    const options = optionChain.options[0];
+    const calls = options.calls || [];
+    const puts = options.puts || [];
+    const strikes = [...new Set([...calls.map(c => c.strike), ...puts.map(p => p.strike)])].sort((a, b) => a - b);
+
+    // Build options table
+    let html = '';
+    for (const strike of strikes) {
+      const call = calls.find(c => c.strike === strike);
+      const put = puts.find(p => p.strike === strike);
+
+      const callBid = call?.bid?.toFixed(2) || '—';
+      const callAsk = call?.ask?.toFixed(2) || '—';
+      const callIv = call?.impliedVolatility?.toFixed(4) || '—';
+      const callDelta = call?.greeks?.delta?.toFixed(4) || '—';
+      const callGamma = call?.greeks?.gamma?.toFixed(4) || '—';
+      const callTheta = call?.greeks?.theta?.toFixed(4) || '—';
+      const callVega = call?.greeks?.vega?.toFixed(4) || '—';
+
+      const putBid = put?.bid?.toFixed(2) || '—';
+      const putAsk = put?.ask?.toFixed(2) || '—';
+      const putIv = put?.impliedVolatility?.toFixed(4) || '—';
+      const putDelta = put?.greeks?.delta?.toFixed(4) || '—';
+      const putGamma = put?.greeks?.gamma?.toFixed(4) || '—';
+      const putTheta = put?.greeks?.theta?.toFixed(4) || '—';
+      const putVega = put?.greeks?.vega?.toFixed(4) || '—';
+
+      html += `<tr style="border-bottom:1px solid var(--card-border)">
+        <td style="text-align:center;font-weight:600">${strike.toFixed(0)}</td>
+        <td>${callBid}</td><td>${callAsk}</td><td>${callIv}</td>
+        <td>${callDelta}</td><td>${callGamma}</td><td>${callTheta}</td><td>${callVega}</td>
+        <td>${putBid}</td><td>${putAsk}</td><td>${putIv}</td>
+        <td>${putDelta}</td><td>${putGamma}</td><td>${putTheta}</td><td>${putVega}</td>
+      </tr>`;
+    }
+
+    document.getElementById('lt-chain-tbody').innerHTML = html;
+    document.getElementById('lt-chain-count').textContent = `${strikes.length} strikes`;
+
+    // Load active positions from CSV
+    loadActivePositions();
+
+  } catch (err) {
+    console.error('Live data error:', err);
+    document.getElementById('lt-chain-tbody').innerHTML = `<tr><td colspan="15" class="empty">Error loading data: ${err.message}</td></tr>`;
+  }
+}
+
+/** Load active positions from trade logs */
+async function loadActivePositions() {
+  try {
+    if (!window.TRADIER_DATA?.positions || window.TRADIER_DATA.positions.length === 0) {
+      document.getElementById('lt-position-tbody').innerHTML = '<tr><td colspan="9" class="empty">No active positions</td></tr>';
+      document.getElementById('lt-position-count').textContent = '0 positions';
+      return;
+    }
+
+    const positions = window.TRADIER_DATA.positions;
+    let html = '';
+
+    for (const pos of positions) {
+      const pnl = (pos.current_price - pos.entry_price) * pos.quantity;
+      const pnlClass = pnl >= 0 ? 'tgreen' : 'red';
+      const pnlStr = pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
+
+      const greeks = `${(pos.delta || 0).toFixed(4)} / ${(pos.gamma || 0).toFixed(4)} / ${(pos.theta || 0).toFixed(4)} / ${(pos.vega || 0).toFixed(4)}`;
+
+      html += `<tr>
+        <td>${pos.symbol} ${pos.side}</td>
+        <td>${pos.type || 'Option'}</td>
+        <td>${pos.strike || '—'}</td>
+        <td>${pos.quantity}</td>
+        <td>$${pos.entry_price?.toFixed(2) || '—'}</td>
+        <td>$${pos.current_price?.toFixed(2) || '—'}</td>
+        <td style="color:var(--${pnlClass}); font-weight:600">${pnlStr}</td>
+        <td style="font-size:12px">${greeks}</td>
+        <td>${pos.status || 'Open'}</td>
+      </tr>`;
+    }
+
+    document.getElementById('lt-position-tbody').innerHTML = html;
+    document.getElementById('lt-position-count').textContent = `${positions.length} position${positions.length !== 1 ? 's' : ''}`;
+
+  } catch (err) {
+    console.error('Position load error:', err);
+  }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
