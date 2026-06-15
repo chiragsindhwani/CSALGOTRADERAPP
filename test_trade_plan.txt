@@ -1,0 +1,101 @@
+═══════════════════════════════════════════════════════════════════════════════
+3-STEP ALPACA PAPER TRADING TEST - SPY 0DTE IRON CONDOR
+═══════════════════════════════════════════════════════════════════════════════
+
+EXECUTION TIME: June 15, 2026 | 11:13 AM ET
+ACCOUNT: Alpaca Paper Trading
+STARTING EQUITY: $100,087.59
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 1: ENTRY (Now - 11:15 AM ET)
+═══════════════════════════════════════════════════════════════════════════════
+
+SPY Current Price: $754.23 (mid)
+
+Iron Condor Structure (15 Delta Spreads):
+  - SHORT PUT   : $750 strike (4 delta)  → Sell to Open
+  - LONG PUT    : $745 strike (25 delta) → Buy to Open
+  - SHORT CALL  : $758 strike (4 delta)  → Sell to Open
+  - LONG CALL   : $763 strike (25 delta) → Buy to Open
+
+Expiration: Today (0DTE) - June 15, 2026 at 4:00 PM
+
+Expected Credit: $0.35 - $0.45 per share
+Target Credit: $0.40 minimum (meets MIN_CREDIT threshold)
+Contracts: 1 spread (4 legs)
+
+Order Submission:
+  1. Sell 1 SPY 750 Put
+  2. Buy 1 SPY 745 Put
+  3. Sell 1 SPY 758 Call
+  4. Buy 1 SPY 763 Call
+
+Cost/Capital Required: $0 (credit spread, received upfront)
+Max Risk: $500 (5-wide spread = $500 per contract, 1 contract)
+Max Profit: Credit Received (if held to expiration)
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 2: PROFIT TARGET (35% of Credit Received)
+═══════════════════════════════════════════════════════════════════════════════
+
+If Credit Received = $0.40/share:
+  → Profit Target = $0.40 × 0.35 = $0.14 profit per share
+  → Total Target P&L = $140 profit (1 contract)
+
+Exit Conditions:
+  ✓ Close entire spread when cumulative P&L = +$140
+  ✓ Check every 5 minutes during market hours
+  ✓ Expected time to reach target: 1-3 hours
+
+Monitoring:
+  - Watch bid-ask spread as market gets closer to strikes
+  - When spread narrows (ITM), close early if profit threshold reached
+  - Use "close" orders for the entire spread
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 3: STOP LOSS (45% of Credit Received)
+═══════════════════════════════════════════════════════════════════════════════
+
+If Credit Received = $0.40/share:
+  → Stop Loss Threshold = $0.40 × 0.45 = $0.18 loss per share
+  → Total Max Loss = $180 loss (1 contract)
+
+Exit Conditions:
+  ✓ Close entire spread if cumulative P&L = -$180
+  ✓ Force close at 3:45 PM ET (15 min before close)
+  ✓ Prevents overnight weekend risk
+
+Risk Management:
+  - Max loss is $180 on $100k account = 0.18% risk
+  - Acceptable risk for paper trading test
+  - Actual stop loss will trigger on P&L monitor
+
+═══════════════════════════════════════════════════════════════════════════════
+EXECUTION CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+PRE-TRADE:
+  [ ] Confirm Alpaca connection active
+  [ ] Verify account has $100k+ equity
+  [ ] Check SPY quote available
+  [ ] Confirm all 4 option legs can be queried
+
+ENTRY:
+  [ ] Submit 4 orders (legs submitted separately)
+  [ ] Record fill prices for each leg
+  [ ] Calculate actual credit received
+  [ ] Log entry timestamp
+
+MONITORING:
+  [ ] Set profit target: Credit × 35%
+  [ ] Set stop loss: Credit × 45%
+  [ ] Check P&L every 5 minutes
+  [ ] Log all updates to trade journal
+
+EXIT:
+  [ ] Close on profit target (35%)
+  [ ] Close on stop loss (45%)
+  [ ] Force close at 3:45 PM ET
+  [ ] Record exit prices and final P&L
+
+═══════════════════════════════════════════════════════════════════════════════
