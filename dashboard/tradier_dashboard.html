@@ -580,10 +580,10 @@
     <div class="top-row">
       <div class="account-card">
         <div class="ac-header">
-          <div class="ac-avatar" style="background:#0284c7; color:#fff; font-weight:600">IB</div>
+          <div id="ac-avatar" class="ac-avatar" style="background:#0284c7; color:#fff; font-weight:600">IB</div>
           <div>
-            <div class="ac-name" style="font-size:16px; font-weight:700; color:#0f172a">IBKR Paper Trading</div>
-            <div class="ac-id" style="font-size:18px; font-weight:700; color:#2563eb; letter-spacing:0.5px">DUQ566282</div>
+            <div id="ac-name" class="ac-name" style="font-size:16px; font-weight:700; color:#0f172a">IBKR Paper Trading</div>
+            <div id="ac-id" class="ac-id" style="font-size:18px; font-weight:700; color:#2563eb; letter-spacing:0.5px">DUQ566282</div>
           </div>
         </div>
         <div style="border-top: 1px solid #e2e8f0; margin: 12px 0; padding-top: 12px">
@@ -596,7 +596,7 @@
         <div style="border-top: 1px solid #e2e8f0; margin: 12px 0; padding-top: 12px">
           <div class="ac-row"><span class="ak">Strategy</span><span class="av">SPY 0DTE Iron Condor</span></div>
           <div class="ac-row"><span class="ak">Expiration</span><span class="av">Same-Day (0DTE)</span></div>
-          <div class="ac-row"><span class="ak">Entry Window</span><span class="av">10:15 - 10:29 AM ET</span></div>
+          <div class="ac-row"><span class="ak">Entry Window</span><span class="ak av">10:15 - 10:29 AM ET</span></div>
           <div class="ac-row"><span class="ak">Force Close</span><span class="av">3:45 PM ET</span></div>
         </div>
       </div>
@@ -2643,19 +2643,24 @@ function render(D) {
   const accountInfo = _brokerAccounts[_currentBroker] || _brokerAccounts['tradier'];
   const acInitials = accountInfo.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
-  $('ac-avatar').textContent    = acInitials;
-  $('ac-name').textContent      = accountInfo.name;
-  $('ac-id').textContent        = `Account ${accountInfo.account_number} (${accountInfo.mode})`;
-  $('ac-type').textContent      = cap(accountInfo.type);
-  $('ac-class').textContent     = cap(accountInfo.classification);
-  $('ac-opt-level').textContent = `Level ${accountInfo.option_level} (Spreads)`;
-  $('ac-pdt-flag').innerHTML    = accountInfo.day_trader
+  // Set account info with null checks to avoid errors if elements are missing
+  const setEl = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+  const setElHtml = (id, val) => { const el = $(id); if (el) el.innerHTML = val; };
+  const setElStyle = (id, css, val) => { const el = $(id); if (el) el.style[css] = val; };
+
+  setEl('ac-avatar', acInitials);
+  setEl('ac-name', accountInfo.name);
+  setEl('ac-id', `Account ${accountInfo.account_number} (${accountInfo.mode})`);
+  setEl('ac-type', cap(accountInfo.type));
+  setEl('ac-class', cap(accountInfo.classification));
+  setEl('ac-opt-level', `Level ${accountInfo.option_level} (Spreads)`);
+  setElHtml('ac-pdt-flag', accountInfo.day_trader
     ? `<span style="color:var(--neg-red);font-weight:700">YES &mdash; restricted</span>`
-    : `<span style="color:var(--tgreen)">No</span>`;
-  $('ac-status').textContent    = cap(accountInfo.status);
-  $('ac-status').style.color    = accountInfo.status === 'active' ? 'var(--tgreen)' : 'var(--yellow)';
-  $('ac-created').textContent   = dtShort(accountInfo.date_created);
-  $('ac-pending').textContent   = bal.pending_orders_count ?? 0;
+    : `<span style="color:var(--tgreen)">No</span>`);
+  setEl('ac-status', cap(accountInfo.status));
+  setElStyle('ac-status', 'color', accountInfo.status === 'active' ? 'var(--tgreen)' : 'var(--yellow)');
+  setEl('ac-created', dtShort(accountInfo.date_created));
+  setEl('ac-pending', bal.pending_orders_count ?? 0);
 
   // SPY-specific P&L from pnl_chart
   const chart         = D.pnl_chart || [];
