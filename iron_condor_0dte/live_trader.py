@@ -330,10 +330,12 @@ class IronCondorTrader:
                 return False
 
         else:
-        # ── FIX C: Two-attempt credit-limit order ─────────────────────────────
-            LIMIT1   = round(self.cfg.MIN_CREDIT, 2)            # e.g. $0.40/shr
-            LIMIT2   = round(self.cfg.MIN_CREDIT * 0.75, 2)    # e.g. $0.30/shr
-            ATTEMPTS = [(LIMIT1, 180), (LIMIT2, 120)]           # (price, timeout_sec)
+        # ── FIX C: Three-attempt credit-limit order ───────────────────────────
+            LIMIT1   = round(self.cfg.MIN_CREDIT, 2)            # e.g. $0.35/shr
+            LIMIT2   = round(self.cfg.MIN_CREDIT * 0.75, 2)    # e.g. $0.26/shr
+            LIMIT3   = 0.20                                      # $0.20/shr
+            ATTEMPTS = [(LIMIT1, 180), (LIMIT2, 120), (LIMIT3, 180)]  # (price, timeout_sec)
+            skip_reasons = {}
 
             for attempt, (limit, timeout) in enumerate(ATTEMPTS, start=1):
                 oid: str | None = None
@@ -356,7 +358,13 @@ class IronCondorTrader:
                     break   # filled — exit the attempt loop
 
                 except RuntimeError as e:
-                    log.warning("  Attempt %d failed: %s", attempt, e)
+                    error_msg = str(e)
+                    skip_reasons[attempt] = error_msg
+                    log.warning("  Attempt %d failed: %s", attempt, error_msg)
+                    # Log this failed attempt to CSV
+                    today = now.strftime("%Y-%m-%d")
+                    skip_reason = f"Attempt {attempt} timeout/no fill: limit=${limit:.2f}/shr, timeout={timeout}s"
+                    self._trade_logger.log_skipped_trade(today, skip_reason, attempt_num=attempt)
                     # Cancel the unfilled order before trying the next limit
                     if oid and not filled_order_id:
                         try:
@@ -757,6 +765,8 @@ class IronCondorTrader:
             if not self.is_market_hours():
                 log.info("Market not open (now %s ET, weekday=%d). Session complete.",
                          now.strftime("%H:%M"), now.weekday())
+                today = now.strftime("%Y-%m-%d")
+                self._trade_logger.log_skipped_trade(today, "Market closed or weekend", attempt_num=0)
                 _tg_send(
                     self._acct_header() +
                     f"⏭️ <b>SESSION SKIPPED — {now.strftime('%Y-%m-%d')}</b>\n"
@@ -767,6 +777,9 @@ class IronCondorTrader:
             # ── PDT guard ─────────────────────────────────────────────────────────
             dt_used = self._pdt_trade_count()
             if dt_used >= self.cfg.PDT_MAX_DAY_TRADES:
+                today = now.strftime("%Y-%m-%d")
+                pdt_reason = f"PDT limit reached: {dt_used}/{self.cfg.PDT_MAX_DAY_TRADES} day trades used in rolling {self.cfg.PDT_WINDOW_DAYS}-day window"
+                self._trade_logger.log_skipped_trade(today, pdt_reason, attempt_num=0)
                 msg = (
                     self._acct_header() +
                     f"⚠️ <b>PDT LIMIT — NO TRADE {now.strftime('%Y-%m-%d')}</b>\n"
@@ -780,11 +793,17 @@ class IronCondorTrader:
             log.info("PDT: %d/%d day trades used in rolling window. Proceeding.",
                      dt_used, self.cfg.PDT_MAX_DAY_TRADES)
 
+            # Flush logs to ensure parent process receives output
+            import sys
+            sys.stdout.flush()
+            sys.stderr.flush()
+
             entered        = False
             session_pnl    = 0.0
             session_credit = 0.0
             close_reason   = "no_trade"
 
+            log.info("Starting main trading loop...")
             while True:
                 now = datetime.now(ET)
 
@@ -816,17 +835,21 @@ class IronCondorTrader:
                     break
 
                 # ── Entry window: 10:15–10:29 AM ─────────────────────────────────
-                if not entered and not self.position and self.is_entry_time():
-                    try:
-                        success = self.enter_trade()
-                        entered = True
-                        if success and self.position:
-                            # Use actual fill credit for session tracking
-                            session_credit = self.position.get("actual_credit",
-                                                               self.position["credit"])
-                    except Exception as e:
-                        log.error("enter_trade raised an unexpected error: %s", e)
-                        entered = True   # prevent retry loop
+                if not entered and not self.position:
+                    entry_time_check = self.is_entry_time()
+                    log.debug("Entry time check at %s ET: %s", now.strftime("%H:%M:%S"), entry_time_check)
+                    if entry_time_check:
+                        log.info("ENTRY WINDOW ACTIVE - Attempting entry...")
+                        try:
+                            success = self.enter_trade()
+                            entered = True
+                            if success and self.position:
+                                # Use actual fill credit for session tracking
+                                session_credit = self.position.get("actual_credit",
+                                                                   self.position["credit"])
+                        except Exception as e:
+                            log.error("enter_trade raised an unexpected error: %s", e, exc_info=True)
+                            entered = True   # prevent retry loop
 
                 # ── Monitor open position ─────────────────────────────────────────
                 if self.position:
@@ -837,6 +860,8 @@ class IronCondorTrader:
                         self._record_day_trade()
                         break   # done for the day
 
+                # Sleep until next check cycle (every minute)
+                log.debug("Sleeping until next check (%.2f hours to close)...", _hours_to_close(now))
                 time.sleep(60)
 
             # ── End-of-session logging ────────────────────────────────────────────
@@ -868,14 +893,24 @@ class IronCondorTrader:
                     + ("✅ TARGET MET" if net_pnl >= 203 else "⚠️ Below target")
                 )
             elif not entered:
+                today = datetime.now(ET).strftime("%Y-%m-%d")
+                self._trade_logger.log_skipped_trade(today, "Entry window passed with no trade attempt (market or data issue)", attempt_num=0)
                 _tg_send(
                     self._acct_header() +
-                    f"⏭️ <b>SESSION SKIPPED — {datetime.now(ET).strftime('%Y-%m-%d')}</b>\n"
+                    f"⏭️ <b>SESSION SKIPPED — {today}</b>\n"
                     "Entry window passed with no trade (market or data issue)."
                 )
 
             log.info("=== Daily Session Complete | P&L=$%.2f | Reason=%s ===",
                      session_pnl, close_reason)
+        except Exception as e:
+            log.error("CRITICAL: Session crashed with exception: %s", e, exc_info=True)
+            import traceback
+            traceback.print_exc()
+            _tg_send(
+                self._acct_header() +
+                f"[CRITICAL ERROR]\nSession crashed: {str(e)}\n\nCheck logs for details."
+            )
         finally:
             # Disconnect broker client (IBKR needs explicit disconnect; Tradier is no-op)
             if hasattr(self.client, "disconnect"):

@@ -23,7 +23,7 @@ class Config:
     # ── Tradier Credentials ───────────────────────────────────────────────────
     TRADIER_TOKEN:      str  = os.getenv("TRADIER_API_TOKEN", "")
     TRADIER_ACCOUNT_ID: str  = os.getenv("TRADIER_ACCOUNT_ID", "")
-    PAPER_TRADE:        bool = os.getenv("TRADIER_PAPER_TRADE", "true").lower() == "true"
+    TRADIER_PAPER_TRADE: bool = os.getenv("TRADIER_PAPER_TRADE", "true").lower() == "true"
 
     # ── IBKR Credentials ──────────────────────────────────────────────────────
     IBKR_HOST:         str   = os.getenv("IBKR_HOST", "127.0.0.1")
@@ -31,6 +31,14 @@ class Config:
     IBKR_CLIENT_ID:    int   = int(os.getenv("IBKR_CLIENT_ID", "1"))
     IBKR_ACCOUNT_ID:   str   = os.getenv("IBKR_ACCOUNT_ID", "")
     IBKR_PAPER_TRADE:  bool  = os.getenv("IBKR_PAPER_TRADE", "true").lower() == "true"
+
+    # Determine paper trading mode based on selected broker
+    @property
+    def PAPER_TRADE(self) -> bool:
+        if self.BROKER == "ibkr":
+            return self.IBKR_PAPER_TRADE
+        else:  # tradier
+            return self.TRADIER_PAPER_TRADE
 
     # ── Instrument ────────────────────────────────────────────────────────────
     SYMBOL: str = "SPY"

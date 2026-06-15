@@ -1,0 +1,2 @@
+id,date,logged_at,environment,account_id,account_name,symbol,strategy,contracts,long_put,short_put,short_call,long_call,wing_width,entry_time,exit_time,outcome,entry_order_id,exit_order_id,entry_credit,bs_credit,exit_cost,gross_pnl,commission,net_pnl,cumulative_pnl,vix_sigma,spy_price_entry,notes
+1,2026-06-04,2026-06-04T18:29:41.737290+00:00,,,,SPY,Iron Condor 0DTE,1,742.0,747,788,793.0,5.0,14:29 ET,,sample_test,TEST,,3.315551228264013,3.315551228264013,,,,,,0.15380000114440917,757.8300170898438,Sample test trade with 1 contract

@@ -1,0 +1,2 @@
+id,date,logged_at,environment,account_id,account_name,symbol,strategy,contracts,long_put,short_put,short_call,long_call,wing_width,entry_time,exit_time,outcome,entry_order_id,exit_order_id,entry_credit,bs_credit,exit_cost,gross_pnl,commission,net_pnl,cumulative_pnl,vix_sigma,spy_price_entry,notes
+1,2026-06-08,2026-06-08T20:00:22.344854+00:00,,,,SPY,Iron Condor 0DTE,,,,,,,,,skipped_attempt_0,,,,,,,,,,,,Entry window passed with no trade attempt (market or data issue)

@@ -97,10 +97,10 @@ def wait_for_market_open(max_wait_minutes: int = 60):
         if decimal_hour >= 9.5:
             minutes_to_open = int((9.5 - decimal_hour) * 60) if decimal_hour < 9.5 else 0
             log.info(
-                f"Pre-market: {now.strftime('%H:%M:%S ET')} — Market opens in ~{abs(minutes_to_open)} min"
+                f"Pre-market: {now.strftime('%H:%M:%S ET')} - Market opens in ~{abs(minutes_to_open)} min"
             )
         else:
-            log.info(f"Pre-market: {now.strftime('%H:%M:%S ET')} — Waiting... ({elapsed}s elapsed)")
+            log.info(f"Pre-market: {now.strftime('%H:%M:%S ET')} - Waiting... ({elapsed}s elapsed)")
 
         time.sleep(10)
 
@@ -118,13 +118,13 @@ def check_ib_gateway() -> bool:
         result = sock.connect_ex(("127.0.0.1", 4002))
         sock.close()
         if result == 0:
-            log.info("✓ IB Gateway is running on localhost:4002")
+            log.info("[OK] IB Gateway is running on localhost:4002")
             return True
         else:
-            log.error("✗ IB Gateway is NOT running on port 4002")
+            log.error("[FAIL] IB Gateway is NOT running on port 4002")
             return False
     except Exception as e:
-        log.error(f"✗ IB Gateway check failed: {e}")
+        log.error(f"[FAIL] IB Gateway check failed: {e}")
         return False
 
 
@@ -141,18 +141,18 @@ def run_validation() -> bool:
         )
         log.info(result.stdout)
         if result.returncode == 0:
-            log.info("✓ Validation passed")
+            log.info("[OK] Validation passed")
             return True
         else:
-            log.error("✗ Validation failed")
+            log.error("[FAIL] Validation failed")
             if result.stderr:
                 log.error(result.stderr)
             return False
     except subprocess.TimeoutExpired:
-        log.error("✗ Validation script timed out")
+        log.error("[FAIL] Validation script timed out")
         return False
     except Exception as e:
-        log.error(f"✗ Validation script error: {e}")
+        log.error(f"[FAIL] Validation script error: {e}")
         return False
 
 
@@ -168,18 +168,18 @@ def start_dashboard() -> subprocess.Popen:
             stderr=subprocess.PIPE,
             text=True,
         )
-        log.info(f"✓ Dashboard process started (PID: {process.pid})")
+        log.info(f"[OK] Dashboard process started (PID: {process.pid})")
         time.sleep(DASHBOARD_STARTUP_TIMEOUT)
 
         # Check if process is still running
         if process.poll() is None:
-            log.info(f"✓ Dashboard is running on http://localhost:{DASHBOARD_PORT}")
+            log.info(f"[OK] Dashboard is running on http://localhost:{DASHBOARD_PORT}")
             return process
         else:
-            log.error("✗ Dashboard process exited unexpectedly")
+            log.error("[FAIL] Dashboard process exited unexpectedly")
             return None
     except Exception as e:
-        log.error(f"✗ Failed to start dashboard: {e}")
+        log.error(f"[FAIL] Failed to start dashboard: {e}")
         return None
 
 
@@ -195,7 +195,7 @@ def start_live_trader():
             stderr=subprocess.STDOUT,
             text=True,
         )
-        log.info(f"✓ Live trader process started (PID: {process.pid})")
+        log.info(f"[OK] Live trader process started (PID: {process.pid})")
 
         # Stream output from the trader in real-time
         while True:
@@ -206,10 +206,10 @@ def start_live_trader():
 
         # Wait for process to complete
         process.wait()
-        log.info(f"✓ Live trader session ended (exit code: {process.returncode})")
+        log.info(f"[OK] Live trader session ended (exit code: {process.returncode})")
         return process.returncode
     except Exception as e:
-        log.error(f"✗ Failed to start live trader: {e}")
+        log.error(f"[FAIL] Failed to start live trader: {e}")
         return 1
 
 
@@ -217,13 +217,13 @@ def start_live_trader():
 
 def main():
     """Main automation sequence."""
-    log_section(f"AUTOSTART SEQUENCE INITIATED — {datetime.now(ET).strftime('%Y-%m-%d %H:%M:%S ET')}")
+    log_section(f"AUTOSTART SEQUENCE INITIATED - {datetime.now(ET).strftime('%Y-%m-%d %H:%M:%S ET')}")
 
     # Step 1: Check if it's a trading day
     now = datetime.now(ET)
     if now.weekday() >= 5:
         log.info(f"Today is {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][now.weekday()]}")
-        log.error("✗ Markets are closed (weekend). Exiting.")
+        log.error("[FAIL] Markets are closed (weekend). Exiting.")
         return 1
 
     log.info(f"Today is {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][now.weekday()]}")
@@ -232,21 +232,31 @@ def main():
     # Step 2: Wait for market to open if it's pre-market
     if is_pre_market():
         if not wait_for_market_open(max_wait_minutes=60):
-            log.error("✗ Failed to start: Market did not open in time")
+            log.error("[FAIL] Failed to start: Market did not open in time")
             return 1
     elif not is_market_open():
-        log.error("✗ Market is closed. Exiting.")
+        log.error("[FAIL] Market is closed. Exiting.")
         return 1
 
-    # Step 3: Check IB Gateway
+    # Step 3: Check broker-specific prerequisites
     log_section("PRE-FLIGHT CHECKS")
-    if not check_ib_gateway():
-        log.error("✗ CRITICAL: IB Gateway is not running. Start IB Gateway and restart.")
-        return 1
+    import os
+    broker = os.getenv("BROKER", "tradier").lower()
 
-    # Step 4: Run validation
-    if not run_validation():
-        log.error("✗ CRITICAL: Pre-flight validation failed. Review errors above.")
+    if broker == "ibkr":
+        # IBKR requires IB Gateway to be running
+        if not check_ib_gateway():
+            log.error("[FAIL] CRITICAL: IB Gateway is not running. Start IB Gateway and restart.")
+            return 1
+        # Run IBKR validation
+        if not run_validation():
+            log.error("[FAIL] CRITICAL: Pre-flight validation failed. Review errors above.")
+            return 1
+    elif broker == "tradier":
+        # Tradier just needs API connectivity check (done in live_trader)
+        log.info("[OK] Tradier broker configured (no IB Gateway required)")
+    else:
+        log.error(f"[FAIL] Unknown broker: {broker}")
         return 1
 
     # Step 5: Start dashboard
@@ -258,7 +268,7 @@ def main():
     try:
         exit_code = start_live_trader()
     except KeyboardInterrupt:
-        log.info("✓ Trader interrupted by user")
+        log.info("[OK] Trader interrupted by user")
         exit_code = 0
     finally:
         # Cleanup: Stop dashboard if it's still running
@@ -270,7 +280,7 @@ def main():
                 dashboard_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 dashboard_process.kill()
-            log.info("✓ Dashboard stopped")
+            log.info("[OK] Dashboard stopped")
 
     log_section("AUTOSTART SEQUENCE COMPLETE")
     log.info(f"Session ended at {datetime.now(ET).strftime('%Y-%m-%d %H:%M:%S ET')}")

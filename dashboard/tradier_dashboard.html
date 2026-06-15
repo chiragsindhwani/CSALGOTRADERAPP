@@ -259,6 +259,7 @@
     .ob-loss    { background: #fee2e2; color: #dc2626; }
     .ob-aborted { background: #fef9c3; color: #854d0e; }
     .ob-nofill  { background: #f1f5f9; color: #64748b; }
+    .ob-skipped { background: #e0e7ff; color: #4f46e5; }
     .pnl-pos    { color: #16a34a; font-weight: 700; }
     .pnl-neg    { color: #dc2626; font-weight: 700; }
     .pnl-zero   { color: #64748b; font-weight: 600; }
@@ -1959,12 +1960,15 @@ function renderHistoricTrades(trades) {
   };
   const outcomeBadge = outcome => {
     const map = {
-      profit_target: ['ob-profit',  'Profit Target'],
-      stop_loss:     ['ob-loss',    'Stop Loss'],
-      force_close:   ['ob-loss',    'Force Close'],
-      aborted:       ['ob-aborted', 'Aborted'],
-      no_fill:       ['ob-nofill',  'No Fill'],
-      no_trade:      ['ob-nofill',  'No Trade'],
+      profit_target:    ['ob-profit',   'Profit Target'],
+      stop_loss:        ['ob-loss',     'Stop Loss'],
+      force_close:      ['ob-loss',     'Force Close'],
+      aborted:          ['ob-aborted',  'Aborted'],
+      no_fill:          ['ob-nofill',   'No Fill'],
+      no_trade:         ['ob-nofill',   'No Trade'],
+      skipped_attempt_0:['ob-skipped',  'Skipped (Pre-Entry)'],
+      skipped_attempt_1:['ob-skipped',  'Skipped (Attempt 1)'],
+      skipped_attempt_2:['ob-skipped',  'Skipped (Attempt 2)'],
     };
     const [cls, label] = map[outcome] || ['ob-nofill', outcome || '—'];
     return `<span class="outcome-badge ${cls}">${label}</span>`;

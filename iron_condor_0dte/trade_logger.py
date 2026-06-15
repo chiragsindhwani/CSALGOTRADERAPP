@@ -2,7 +2,7 @@
 Trade Logger — dual-backend: CSV (local) or SQLite/PostgreSQL (AWS).
 
 Backend selection (automatic, no config needed):
-  Local machine  → trades/trade_log.csv
+  Local machine  → trades/trade_log_YYYY-MM-DD.csv (date-specific files)
   AWS EC2        → trades/trades.db  (SQLite, or PostgreSQL if DATABASE_URL is set)
 
 Auto-detection:
@@ -19,11 +19,14 @@ Usage in live_trader.py:
     from .trade_logger import TradeLogger
     logger = TradeLogger(root_dir=_ROOT)
     logger.log_trade(record_dict)
+    logger.log_skipped_trade(date, skip_reason, attempt_num)
+    logger.send_telegram_alert(message)
 """
 
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import os
 import sqlite3
@@ -146,27 +149,34 @@ class TradeLogger:
         self.trades_dir.mkdir(exist_ok=True)
 
         self.env       = _detect_env()
-        self.csv_path  = self.trades_dir / "trade_log.csv"
         self.db_path   = self.trades_dir / "trades.db"
         self.db_url    = os.getenv("DATABASE_URL", "")   # PostgreSQL override
+
+        self.telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
 
         if self.env == "aws":
             self._init_db()
             log.info("TradeLogger: AWS mode -> %s",
                      self.db_url or str(self.db_path))
         else:
-            self._init_csv()
-            log.info("TradeLogger: LOCAL mode -> %s", self.csv_path)
+            log.info("TradeLogger: LOCAL mode -> trades/trade_log_YYYY-MM-DD.csv (date-specific)")
 
     # ── Initialisation ────────────────────────────────────────────────────────
 
-    def _init_csv(self) -> None:
+    def _get_csv_path(self, date: str | None = None) -> Path:
+        """Get the date-specific CSV file path (e.g., trade_log_2026-06-02.csv)."""
+        if not date:
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return self.trades_dir / f"trade_log_{date}.csv"
+
+    def _ensure_csv_header(self, csv_path: Path) -> None:
         """Create CSV with header row if it does not already exist."""
-        if not self.csv_path.exists():
-            with self.csv_path.open("w", newline="", encoding="utf-8") as f:
+        if not csv_path.exists():
+            with csv_path.open("w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=COLUMNS)
                 writer.writeheader()
-            log.info("TradeLogger: created %s", self.csv_path)
+            log.info("TradeLogger: created %s", csv_path)
 
     def _init_db(self) -> None:
         """Create SQLite DB (or PostgreSQL table) with trade_log schema."""
@@ -224,11 +234,16 @@ class TradeLogger:
     # ── CSV backend ───────────────────────────────────────────────────────────
 
     def _write_csv(self, row: dict[str, Any]) -> None:
-        # Assign sequential id (= current row count)
-        with self.csv_path.open("r", encoding="utf-8") as f:
+        # Get date-specific CSV path
+        date = row.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+        csv_path = self._get_csv_path(date)
+        self._ensure_csv_header(csv_path)
+
+        # Assign sequential id (= current row count in this file)
+        with csv_path.open("r", encoding="utf-8") as f:
             # header counts as 1, so num rows = line count - 1
             row["id"] = max(sum(1 for _ in f) - 1, 0) + 1
-        with self.csv_path.open("a", newline="", encoding="utf-8") as f:
+        with csv_path.open("a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction="ignore")
             writer.writerow(row)
 
@@ -274,10 +289,84 @@ class TradeLogger:
                 cur.execute(sql, vals)
             conn.commit()
 
+    # ── Telegram alerts ───────────────────────────────────────────────────────
+
+    def send_telegram_alert(self, message: str) -> bool:
+        """
+        Send a Telegram alert message. Returns True if successful, False otherwise.
+        Gracefully fails if TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured.
+        """
+        if not self.telegram_token or not self.telegram_chat_id:
+            log.debug("TradeLogger: Telegram not configured (missing token or chat_id)")
+            return False
+
+        try:
+            url = f"https://api.telegram.org/bot{self.telegram_token}/sendMessage"
+            data = {
+                "chat_id": self.telegram_chat_id,
+                "text": message,
+                "parse_mode": "HTML"
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(data).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            response = urllib.request.urlopen(req, timeout=5)
+            result = json.loads(response.read().decode("utf-8"))
+            if result.get("ok"):
+                log.info("TradeLogger: Telegram alert sent successfully")
+                return True
+            else:
+                log.warning("TradeLogger: Telegram API returned error: %s", result.get("description"))
+                return False
+        except Exception as e:
+            log.error("TradeLogger: failed to send Telegram alert: %s", e)
+            return False
+
+    def log_skipped_trade(self, date: str, skip_reason: str, attempt_num: int = 1) -> None:
+        """
+        Log a skipped trade attempt with reason to CSV and optionally send Telegram alert.
+
+        Args:
+            date: YYYY-MM-DD format date
+            skip_reason: Human-readable reason (e.g., "VIX too high (32.5 > 30.0)")
+            attempt_num: Which attempt (1 or 2)
+        """
+        outcome = f"skipped_attempt_{attempt_num}"
+
+        record = {
+            "date": date,
+            "outcome": outcome,
+            "notes": skip_reason,
+            "symbol": "SPY",
+            "strategy": "Iron Condor 0DTE",
+        }
+
+        row = self._build_row(record)
+        try:
+            if self.env == "aws":
+                self._write_db(row)
+            else:
+                self._write_csv(row)
+            log.info("TradeLogger: logged skipped trade %s | attempt %d | %s",
+                     date, attempt_num, skip_reason)
+
+            # Send Telegram alert for both skip attempts
+            telegram_msg = (
+                f"<b>[SKIP ATTEMPT {attempt_num}]</b>\n"
+                f"<i>Date:</i> {date}\n"
+                f"<i>Reason:</i> {skip_reason}"
+            )
+            self.send_telegram_alert(telegram_msg)
+
+        except Exception as e:
+            log.error("TradeLogger: failed to log skipped trade: %s", e)
+
     # ── Read helpers (for dashboard / reporting) ──────────────────────────────
 
     def all_trades(self) -> list[dict[str, Any]]:
-        """Return all logged trade rows as a list of dicts."""
+        """Return all logged trade rows as a list of dicts from all date-specific CSV files."""
         if self.env == "aws":
             if self.db_url:
                 with self._pg_conn() as conn:
@@ -293,7 +382,13 @@ class TradeLogger:
                     ).fetchall()
                     return [dict(r) for r in rows]
         else:
-            if not self.csv_path.exists():
-                return []
-            with self.csv_path.open("r", encoding="utf-8") as f:
-                return list(csv.DictReader(f))
+            # Aggregate all date-specific CSV files
+            all_rows = []
+            csv_files = sorted(self.trades_dir.glob("trade_log_*.csv"))
+            for csv_file in csv_files:
+                try:
+                    with csv_file.open("r", encoding="utf-8") as f:
+                        all_rows.extend(list(csv.DictReader(f)))
+                except Exception as e:
+                    log.warning("TradeLogger: failed to read %s: %s", csv_file, e)
+            return all_rows

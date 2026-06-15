@@ -140,23 +140,32 @@ def _fetch_gainloss_history(get_fn, account_id: str, days: int = 365) -> list[di
 
 
 def _load_trade_log() -> list[dict]:
-    """Read trades/trade_log.csv and return as list of dicts (newest first)."""
-    csv_path = Path(__file__).resolve().parent / "trades" / "trade_log.csv"
-    if not csv_path.exists():
+    """Read all trade_log_*.csv files from trades/ dir and return as list of dicts (newest first)."""
+    trades_dir = Path(__file__).resolve().parent.parent / "trades"
+    if not trades_dir.exists():
         return []
+
     rows = []
-    with csv_path.open(encoding="utf-8", newline="") as f:
-        for row in csv.DictReader(f):
-            # Coerce numeric fields so JSON stays compact
-            for col in ("contracts", "long_put", "short_put", "short_call", "long_call",
-                        "wing_width", "entry_credit", "bs_credit", "exit_cost",
-                        "gross_pnl", "commission", "net_pnl", "cumulative_pnl",
-                        "vix_sigma", "spy_price_entry"):
-                try:
-                    row[col] = float(row[col]) if row[col] not in ("", "None", None) else None
-                except (ValueError, TypeError):
-                    row[col] = None
-            rows.append(row)
+    # Load all date-specific CSV files (trade_log_YYYY-MM-DD.csv)
+    csv_files = sorted(trades_dir.glob("trade_log_*.csv"))
+    for csv_path in csv_files:
+        try:
+            with csv_path.open(encoding="utf-8", newline="") as f:
+                for row in csv.DictReader(f):
+                    # Coerce numeric fields so JSON stays compact
+                    for col in ("contracts", "long_put", "short_put", "short_call", "long_call",
+                                "wing_width", "entry_credit", "bs_credit", "exit_cost",
+                                "gross_pnl", "commission", "net_pnl", "cumulative_pnl",
+                                "vix_sigma", "spy_price_entry"):
+                        try:
+                            row[col] = float(row[col]) if row[col] not in ("", "None", None) else None
+                        except (ValueError, TypeError):
+                            row[col] = None
+                    rows.append(row)
+        except Exception as e:
+            import sys
+            print(f"Warning: Could not read {csv_path}: {e}", file=sys.stderr)
+
     return list(reversed(rows))   # newest first
 
 # ── Load .env manually (no extra deps) ────────────────────────────────────────
