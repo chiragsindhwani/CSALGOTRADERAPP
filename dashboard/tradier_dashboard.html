@@ -779,28 +779,29 @@
     <!-- SPY Options Chain Table -->
     <div class="table-card">
       <div class="table-card-header">
-        <h3>SPY 0DTE Options Chain - All Strikes</h3>
+        <h3>SPY 0DTE Options Chain</h3>
         <span class="tcount" id="lt-chain-count">0 strikes</span>
       </div>
-      <div style="overflow-x:auto; max-height:500px; overflow-y:auto">
-        <table>
-          <thead style="position:sticky; top:0; background:#fff; z-index:10">
+      <div style="overflow-x:auto; max-height:600px; overflow-y:auto">
+        <table style="font-size:12px">
+          <thead style="position:sticky; top:0; background:#fff; z-index:10; border-bottom: 2px solid #2563eb">
             <tr>
-              <th>Strike</th>
-              <th>Call Bid</th>
-              <th>Call Ask</th>
-              <th>Call IV</th>
-              <th>Call Delta</th>
-              <th>Call Gamma</th>
-              <th>Call Theta</th>
-              <th>Call Vega</th>
-              <th>Put Bid</th>
-              <th>Put Ask</th>
-              <th>Put IV</th>
-              <th>Put Delta</th>
-              <th>Put Gamma</th>
-              <th>Put Theta</th>
-              <th>Put Vega</th>
+              <th colspan="5" style="text-align:center; border-right: 2px solid #ccc; padding: 8px 4px">CALLS</th>
+              <th style="border-right: 2px solid #ccc; padding: 8px 4px">STRIKE</th>
+              <th colspan="5" style="text-align:center; padding: 8px 4px">PUTS</th>
+            </tr>
+            <tr style="border-bottom: 1px solid #e2e8f0">
+              <th style="padding: 6px 4px">Last Price</th>
+              <th style="padding: 6px 4px">Bid</th>
+              <th style="padding: 6px 4px">Ask</th>
+              <th style="padding: 6px 4px">Vol</th>
+              <th style="padding: 6px 4px; border-right: 2px solid #ccc">OI</th>
+              <th style="padding: 6px 4px; border-right: 2px solid #ccc">Strike</th>
+              <th style="padding: 6px 4px">Last Price</th>
+              <th style="padding: 6px 4px">Bid</th>
+              <th style="padding: 6px 4px">Ask</th>
+              <th style="padding: 6px 4px">Vol</th>
+              <th style="padding: 6px 4px">OI</th>
             </tr>
           </thead>
           <tbody id="lt-chain-tbody">
@@ -2761,45 +2762,56 @@ async function refreshLiveData() {
       return distance <= 10; // Show strikes within $10 of current price
     });
 
-    // Build options table from IBKR data
+    // Build options table in professional format (Calls | Strike | Puts)
     let html = '';
-    const displayOptions = filteredOptions.length > 0 ? filteredOptions : optionsData.slice(0, 20);  // fallback: show first 20 if filter returns nothing
+    const displayOptions = filteredOptions.length > 0 ? filteredOptions : optionsData.slice(0, 30);
+
     for (const strikeData of displayOptions) {
       const strike = strikeData.strike;
       const call = strikeData.call || {};
       const put = strikeData.put || {};
 
-      // Helper function to safely format numbers (handles null/undefined/0)
+      // Helper function to safely format numbers
       const fmt = (val, decimals) => {
         if (val === null || val === undefined) return '—';
         if (typeof val !== 'number') return '—';
         return val.toFixed(decimals);
       };
 
-      // Format call data
+      const fmtInt = (val) => {
+        if (val === null || val === undefined || val === 0) return '—';
+        return val.toString();
+      };
+
+      // Call side data
+      const callLast = fmt(call.last, 2);
       const callBid = fmt(call.bid, 2);
       const callAsk = fmt(call.ask, 2);
-      const callIv = call.iv !== null && call.iv !== undefined ? (call.iv * 100).toFixed(2) + '%' : '—';
-      const callDelta = fmt(call.delta, 4);
-      const callGamma = fmt(call.gamma, 4);
-      const callTheta = fmt(call.theta, 4);
-      const callVega = fmt(call.vega, 4);
+      const callVol = fmtInt(call.volume);
+      const callOI = fmtInt(call.openInterest);
 
-      // Format put data
+      // Put side data
+      const putLast = fmt(put.last, 2);
       const putBid = fmt(put.bid, 2);
       const putAsk = fmt(put.ask, 2);
-      const putIv = put.iv !== null && put.iv !== undefined ? (put.iv * 100).toFixed(2) + '%' : '—';
-      const putDelta = fmt(put.delta, 4);
-      const putGamma = fmt(put.gamma, 4);
-      const putTheta = fmt(put.theta, 4);
-      const putVega = fmt(put.vega, 4);
+      const putVol = fmtInt(put.volume);
+      const putOI = fmtInt(put.openInterest);
 
-      html += `<tr style="border-bottom:1px solid var(--card-border)">
-        <td style="text-align:center;font-weight:600">${strike.toFixed(0)}</td>
-        <td>${callBid}</td><td>${callAsk}</td><td>${callIv}</td>
-        <td>${callDelta}</td><td>${callGamma}</td><td>${callTheta}</td><td>${callVega}</td>
-        <td>${putBid}</td><td>${putAsk}</td><td>${putIv}</td>
-        <td>${putDelta}</td><td>${putGamma}</td><td>${putTheta}</td><td>${putVega}</td>
+      // Highlight ATM strike
+      const atm = Math.abs(strike - spyPrice) < 1 ? 'background:#e0f2fe; font-weight:600;' : '';
+
+      html += `<tr style="border-bottom:1px solid var(--card-border); ${atm}">
+        <td style="padding:6px 4px;text-align:right">${callLast}</td>
+        <td style="padding:6px 4px;text-align:right">${callBid}</td>
+        <td style="padding:6px 4px;text-align:right">${callAsk}</td>
+        <td style="padding:6px 4px;text-align:right;color:#666">${callVol}</td>
+        <td style="padding:6px 4px;text-align:right;color:#666;border-right:2px solid #ccc">${callOI}</td>
+        <td style="padding:6px 4px;text-align:center;font-weight:600;border-right:2px solid #ccc;background:#f9fafb">$${strike.toFixed(0)}</td>
+        <td style="padding:6px 4px;text-align:right">${putLast}</td>
+        <td style="padding:6px 4px;text-align:right">${putBid}</td>
+        <td style="padding:6px 4px;text-align:right">${putAsk}</td>
+        <td style="padding:6px 4px;text-align:right;color:#666">${putVol}</td>
+        <td style="padding:6px 4px;text-align:right;color:#666">${putOI}</td>
       </tr>`;
     }
 

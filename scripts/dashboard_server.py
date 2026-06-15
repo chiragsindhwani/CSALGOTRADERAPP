@@ -97,8 +97,11 @@ def _fetch_live_spy_options():
                 # Call data
                 if call_row is not None:
                     strike_data["call"] = {
+                        "last": float(call_row.get("lastPrice", 0)) if call_row.get("lastPrice") and call_row.get("lastPrice") > 0 else None,
                         "bid": float(call_row.get("bid", 0)) if call_row.get("bid") and call_row.get("bid") > 0 else None,
                         "ask": float(call_row.get("ask", 0)) if call_row.get("ask") and call_row.get("ask") > 0 else None,
+                        "volume": int(call_row.get("volume", 0)) if call_row.get("volume") else 0,
+                        "openInterest": int(call_row.get("openInterest", 0)) if call_row.get("openInterest") else 0,
                         "iv": float(call_row.get("impliedVolatility", 0)) if call_row.get("impliedVolatility") else None,
                         "delta": float(call_row.get("delta", 0)) if call_row.get("delta") else None,
                         "gamma": float(call_row.get("gamma", 0)) if call_row.get("gamma") else None,
@@ -109,8 +112,11 @@ def _fetch_live_spy_options():
                 # Put data
                 if put_row is not None:
                     strike_data["put"] = {
+                        "last": float(put_row.get("lastPrice", 0)) if put_row.get("lastPrice") and put_row.get("lastPrice") > 0 else None,
                         "bid": float(put_row.get("bid", 0)) if put_row.get("bid") and put_row.get("bid") > 0 else None,
                         "ask": float(put_row.get("ask", 0)) if put_row.get("ask") and put_row.get("ask") > 0 else None,
+                        "volume": int(put_row.get("volume", 0)) if put_row.get("volume") else 0,
+                        "openInterest": int(put_row.get("openInterest", 0)) if put_row.get("openInterest") else 0,
                         "iv": float(put_row.get("impliedVolatility", 0)) if put_row.get("impliedVolatility") else None,
                         "delta": float(put_row.get("delta", 0)) if put_row.get("delta") else None,
                         "gamma": float(put_row.get("gamma", 0)) if put_row.get("gamma") else None,
