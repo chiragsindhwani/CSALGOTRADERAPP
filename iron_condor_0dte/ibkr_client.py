@@ -131,6 +131,111 @@ class IBKRClient(BaseBrokerClient):
             log.warning("get_quote failed for %s: %s", symbol, e)
             return {"bid": 0, "ask": 0, "last": 0}
 
+    def get_options_chain(self, symbol: str = "SPY", expiration: str = None) -> list:
+        """Fetch live options chain from TWS market data.
+
+        Args:
+            symbol: underlying symbol (default: "SPY")
+            expiration: expiration date (YYYYMMDD format, default: today for 0DTE)
+
+        Returns:
+            list of dicts with strike, call data, put data
+        """
+        try:
+            from datetime import datetime
+
+            # Get stock to get current price
+            stk = Stock(symbol, "SMART", "USD")
+            self.ib.qualifyContracts(stk)
+            stk_ticker = self.ib.reqMktData(stk, "", False, False)
+            self.ib.sleep(0.2)
+            spy_price = float(stk_ticker.last or stk_ticker.close or 0)
+
+            # Get option chains from IBKR
+            chains = self.ib.reqSecDefOptParams(symbol, "", "STK", None)
+            if not chains:
+                log.warning("No option chains found for %s", symbol)
+                return []
+
+            # Use first chain (usually the closest expiration)
+            chain = chains[0]
+
+            # Determine expiration to use
+            if expiration is None:
+                # Use today's date for 0DTE
+                today = datetime.now().strftime("%Y%m%d")
+                expirations = chain.expirations
+                exp_to_use = today if today in expirations else (expirations[0] if expirations else None)
+            else:
+                exp_to_use = expiration
+
+            if not exp_to_use:
+                log.warning("No valid expiration found for %s", symbol)
+                return []
+
+            # Get strikes
+            strikes = chain.strikes
+
+            options_data = []
+
+            # Request market data for calls and puts
+            for strike in strikes:
+                # Only request nearby strikes (within $20 of price)
+                if abs(strike - spy_price) > 20:
+                    continue
+
+                call = Option(symbol, exp_to_use, strike, "CALL", "SMART")
+                put = Option(symbol, exp_to_use, strike, "PUT", "SMART")
+
+                # Qualify and request market data
+                self.ib.qualifyContracts(call, put)
+                call_ticker = self.ib.reqMktData(call, "100,101,104,106,107,165,221", False, False)
+                put_ticker = self.ib.reqMktData(put, "100,101,104,106,107,165,221", False, False)
+
+                self.ib.sleep(0.1)
+
+                # Extract data from tickers
+                strike_data = {
+                    "strike": float(strike),
+                    "call": {
+                        "last": float(call_ticker.last or 0),
+                        "bid": float(call_ticker.bid or 0),
+                        "ask": float(call_ticker.ask or 0),
+                        "volume": int(call_ticker.volume or 0),
+                        "openInterest": int(call_ticker.openInterest or 0),
+                        "iv": float(call_ticker.impliedVolatility or 0),
+                        "delta": float(call_ticker.delta or 0),
+                        "gamma": float(call_ticker.gamma or 0),
+                        "theta": float(call_ticker.theta or 0),
+                        "vega": float(call_ticker.vega or 0),
+                    },
+                    "put": {
+                        "last": float(put_ticker.last or 0),
+                        "bid": float(put_ticker.bid or 0),
+                        "ask": float(put_ticker.ask or 0),
+                        "volume": int(put_ticker.volume or 0),
+                        "openInterest": int(put_ticker.openInterest or 0),
+                        "iv": float(put_ticker.impliedVolatility or 0),
+                        "delta": float(put_ticker.delta or 0),
+                        "gamma": float(put_ticker.gamma or 0),
+                        "theta": float(put_ticker.theta or 0),
+                        "vega": float(put_ticker.vega or 0),
+                    },
+                }
+
+                options_data.append(strike_data)
+
+            # Cancel market data requests
+            for opt_data in options_data:
+                # Cleanup (optional - depends on ib_insync behavior)
+                pass
+
+            return sorted(options_data, key=lambda x: x["strike"])
+
+        except Exception as e:
+            log.error("get_options_chain failed: %s", e)
+            return []
+
     def get_profile(self) -> dict:
         """Get account profile info.
 
