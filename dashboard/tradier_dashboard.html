@@ -5,7 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tradier Account Dashboard</title>
   <script src="tradier_account_data.js"></script>
-  <script src="backtest_simulation.js" onerror="window.BACKTEST_SIMULATION=null;"></script>
+  <script>
+    console.log('Loading backtest_simulation.js...');
+  </script>
+  <script src="backtest_simulation.js"
+    onload="console.log('✓ backtest_simulation.js loaded, BACKTEST_SIMULATION:', !!window.BACKTEST_SIMULATION);"
+    onerror="console.error('✗ Failed to load backtest_simulation.js'); window.BACKTEST_SIMULATION=null;"></script>
+  <script>
+    console.log('After backtest_simulation.js script tag, BACKTEST_SIMULATION:', !!window.BACKTEST_SIMULATION);
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -2126,11 +2134,13 @@ function renderHistoricTrades(trades) {
 
 // ── Tab navigation ────────────────────────────────────────────────────────────
 function showMainTab(tab) {
+  console.log('showMainTab called with:', tab);
   document.querySelectorAll('.main-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('dashboard-panel').style.display       = tab === 'dashboard'       ? '' : 'none';
   document.getElementById('backtest-panel').style.display        = tab === 'backtest'        ? '' : 'none';
   document.getElementById('livetrade-panel').style.display       = tab === 'livetrade'      ? '' : 'none';
   document.getElementById('strategy-rules-panel').style.display  = tab === 'strategy-rules'  ? '' : 'none';
+  if (tab === 'backtest') console.log('Backtest panel display set to:', document.getElementById('backtest-panel').style.display);
 
   // Start/stop auto-refresh based on tab
   if (tab === 'dashboard') {
@@ -2457,6 +2467,8 @@ function renderBacktest(D) {
   const logTrades= (D.trade_log || []).slice().reverse()
                     .filter(t => ['profit_target','stop_loss','force_close','aborted'].includes(t.outcome));
 
+  console.log('renderBacktest called:', { sim: !!sim, simTrades: sim?.trades?.length || 0, apiTrades: apiTrades.length, logTrades: logTrades.length });
+
   let trades, dataSource, simMeta = null;
 
   if (sim && sim.trades && sim.trades.length > 0) {
@@ -2464,16 +2476,20 @@ function renderBacktest(D) {
     trades     = sim.trades.filter(t => t.outcome !== 'no_fill');
     dataSource = `1-year simulation (${sim.trades.length} days)`;
     simMeta    = sim;
+    console.log('Using simulation data, trades count:', trades.length);
   } else if (apiTrades.length >= logTrades.length) {
     trades     = apiTrades;
     dataSource = 'Tradier gain/loss API';
+    console.log('Using API trades, count:', trades.length);
   } else {
     trades     = logTrades;
     dataSource = 'manual trade log';
+    console.log('Using log trades, count:', trades.length);
   }
 
   const m         = computeBacktest(trades);
   const liveCount = trades.length;
+  console.log('computeBacktest result:', m ? 'metrics computed' : 'null/undefined');
 
   // Header meta
   $('bt-trade-count').textContent = liveCount;
@@ -3052,7 +3068,7 @@ async function loadActivePositions() {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   if (typeof window.TRADIER_DATA === 'undefined') {
     document.querySelector('.main-wrap').innerHTML = `
       <div style="text-align:center;padding:80px">
@@ -3067,10 +3083,29 @@ window.addEventListener('DOMContentLoaded', () => {
       </div>`;
     return;
   }
+
+  // Load backtest_simulation.js if not already loaded
+  if (!window.BACKTEST_SIMULATION) {
+    try {
+      const resp = await fetch('backtest_simulation.js?bust=' + Date.now(), { cache: 'no-store' });
+      const text = await resp.text();
+      console.log('Fetched backtest_simulation.js, length:', text.length);
+      // Extract JSON from window.BACKTEST_SIMULATION = {...}
+      const match = text.match(/window\.BACKTEST_SIMULATION\s*=\s*(\{[\s\S]*?\});?/);
+      if (match) {
+        window.BACKTEST_SIMULATION = JSON.parse(match[1]);
+        console.log('✓ Parsed BACKTEST_SIMULATION, trades:', window.BACKTEST_SIMULATION.trades?.length || 0);
+      }
+    } catch (err) {
+      console.error('Error loading backtest data:', err);
+    }
+  }
+
   // Broker toggle boot — MUST run BEFORE render() so _currentBroker is set
   initBrokerToggle();
 
   // Now render with correct broker already initialized
+  console.log('About to call render() with TRADIER_DATA, BACKTEST_SIMULATION:', !!window.BACKTEST_SIMULATION);
   render(window.TRADIER_DATA);
 
   // Strategy toggle boot
