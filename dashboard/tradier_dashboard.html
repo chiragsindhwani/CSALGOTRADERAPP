@@ -2746,6 +2746,8 @@ async function refreshLiveData() {
 
     // Parse IBKR format: data.options contains all strikes with calls/puts
     const optionsData = data.options || [];
+    const spyPrice = data.spy_price || 0;
+
     if (!Array.isArray(optionsData) || optionsData.length === 0) {
       document.getElementById('lt-chain-tbody').innerHTML = '<tr><td colspan="15" class="empty">No options data available from TWS</td></tr>';
       document.getElementById('lt-chain-count').textContent = '0 strikes';
@@ -2753,29 +2755,44 @@ async function refreshLiveData() {
       return;
     }
 
+    // Filter to strikes within +/- $10 of current SPY price (show ATM and nearby strikes)
+    const filteredOptions = optionsData.filter(s => {
+      const distance = Math.abs(s.strike - spyPrice);
+      return distance <= 10; // Show strikes within $10 of current price
+    });
+
     // Build options table from IBKR data
     let html = '';
-    for (const strikeData of optionsData) {
+    const displayOptions = filteredOptions.length > 0 ? filteredOptions : optionsData.slice(0, 20);  // fallback: show first 20 if filter returns nothing
+    for (const strikeData of displayOptions) {
       const strike = strikeData.strike;
       const call = strikeData.call || {};
       const put = strikeData.put || {};
 
-      // Format bid/ask
-      const callBid = call.bid !== undefined ? call.bid.toFixed(2) : '—';
-      const callAsk = call.ask !== undefined ? call.ask.toFixed(2) : '—';
-      const callIv = call.iv !== undefined ? (call.iv * 100).toFixed(2) + '%' : '—';
-      const callDelta = call.delta !== undefined ? call.delta.toFixed(4) : '—';
-      const callGamma = call.gamma !== undefined ? call.gamma.toFixed(4) : '—';
-      const callTheta = call.theta !== undefined ? call.theta.toFixed(4) : '—';
-      const callVega = call.vega !== undefined ? call.vega.toFixed(4) : '—';
+      // Helper function to safely format numbers (handles null/undefined/0)
+      const fmt = (val, decimals) => {
+        if (val === null || val === undefined) return '—';
+        if (typeof val !== 'number') return '—';
+        return val.toFixed(decimals);
+      };
 
-      const putBid = put.bid !== undefined ? put.bid.toFixed(2) : '—';
-      const putAsk = put.ask !== undefined ? put.ask.toFixed(2) : '—';
-      const putIv = put.iv !== undefined ? (put.iv * 100).toFixed(2) + '%' : '—';
-      const putDelta = put.delta !== undefined ? put.delta.toFixed(4) : '—';
-      const putGamma = put.gamma !== undefined ? put.gamma.toFixed(4) : '—';
-      const putTheta = put.theta !== undefined ? put.theta.toFixed(4) : '—';
-      const putVega = put.vega !== undefined ? put.vega.toFixed(4) : '—';
+      // Format call data
+      const callBid = fmt(call.bid, 2);
+      const callAsk = fmt(call.ask, 2);
+      const callIv = call.iv !== null && call.iv !== undefined ? (call.iv * 100).toFixed(2) + '%' : '—';
+      const callDelta = fmt(call.delta, 4);
+      const callGamma = fmt(call.gamma, 4);
+      const callTheta = fmt(call.theta, 4);
+      const callVega = fmt(call.vega, 4);
+
+      // Format put data
+      const putBid = fmt(put.bid, 2);
+      const putAsk = fmt(put.ask, 2);
+      const putIv = put.iv !== null && put.iv !== undefined ? (put.iv * 100).toFixed(2) + '%' : '—';
+      const putDelta = fmt(put.delta, 4);
+      const putGamma = fmt(put.gamma, 4);
+      const putTheta = fmt(put.theta, 4);
+      const putVega = fmt(put.vega, 4);
 
       html += `<tr style="border-bottom:1px solid var(--card-border)">
         <td style="text-align:center;font-weight:600">${strike.toFixed(0)}</td>
@@ -2787,7 +2804,7 @@ async function refreshLiveData() {
     }
 
     document.getElementById('lt-chain-tbody').innerHTML = html;
-    document.getElementById('lt-chain-count').textContent = `${optionsData.length} strikes`;
+    document.getElementById('lt-chain-count').textContent = `${displayOptions.length} strikes (${optionsData.length} total)`;
 
     // Load active positions from CSV
     loadActivePositions();
