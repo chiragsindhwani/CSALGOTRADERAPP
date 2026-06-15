@@ -184,18 +184,18 @@ def start_dashboard() -> subprocess.Popen:
 
 
 def start_live_trader():
-    """Start the live trader (blocking, runs until session ends or error)."""
-    log_section("STARTING LIVE TRADER")
+    """Start the automated live trader (blocking, runs until session ends or error)."""
+    log_section("STARTING AUTOMATED LIVE TRADER")
     try:
-        log.info("Launching live trader: python -m iron_condor_0dte.live_trader")
+        log.info("Launching automated trader: python auto_trade_live.py")
         process = subprocess.Popen(
-            [sys.executable, "-m", "iron_condor_0dte.live_trader"],
+            [sys.executable, "auto_trade_live.py"],
             cwd=str(PROJECT_ROOT),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
         )
-        log.info(f"[OK] Live trader process started (PID: {process.pid})")
+        log.info(f"[OK] Automated trader process started (PID: {process.pid})")
 
         # Stream output from the trader in real-time
         while True:
@@ -206,7 +206,7 @@ def start_live_trader():
 
         # Wait for process to complete
         process.wait()
-        log.info(f"[OK] Live trader session ended (exit code: {process.returncode})")
+        log.info(f"[OK] Automated trader session ended (exit code: {process.returncode})")
         return process.returncode
     except Exception as e:
         log.error(f"[FAIL] Failed to start live trader: {e}")
