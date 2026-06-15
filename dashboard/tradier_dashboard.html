@@ -219,7 +219,6 @@
     .weight-tab:not(.active):hover { background: var(--card-border); }
 
     .chart-wrap { position: relative; }
-    #monthly-canvas { display: block; width: 100%; cursor: crosshair; }
     .chart-tooltip {
       position: absolute; background: #fff; border: 1px solid var(--card-border);
       border-radius: 8px; padding: 10px 14px; font-size: 12px; line-height: 1.6;
@@ -525,7 +524,7 @@
 
   <!-- ══ MAIN TAB BAR ══════════════════════════════════════════════════════════ -->
   <div class="main-tab-bar">
-    <button class="main-tab-btn active" data-tab="dashboard" onclick="showMainTab('dashboard')">Performance</button>
+    <button class="main-tab-btn active" data-tab="dashboard" onclick="showMainTab('dashboard')">Account Overview</button>
     <button class="main-tab-btn" data-tab="livetrade" onclick="showMainTab('livetrade')">Live Trade</button>
     <button class="main-tab-btn" data-tab="backtest" onclick="showMainTab('backtest')">Backtesting Results</button>
     <button class="main-tab-btn" data-tab="strategy-rules" onclick="showMainTab('strategy-rules')">Strategy Rules</button>
@@ -537,38 +536,6 @@
   <!-- ══ PERFORMANCE PANEL (new light design) ══════════════════════════════════ -->
   <div class="perf-panel">
 
-    <!-- Row 1: title + view tabs -->
-    <div class="perf-header">
-      <h2 class="perf-title">Performance by Month</h2>
-      <div class="view-tabs" id="view-tabs">
-        <button class="view-tab" data-view="running" onclick="setView('running')">Running P/L</button>
-        <button class="view-tab active" data-view="performance" onclick="setView('performance')">Performance</button>
-      </div>
-    </div>
-
-    <!-- Chart card -->
-    <div class="chart-card">
-      <div class="chart-top">
-        <div class="big-metric">
-          <div class="big-metric-value" id="big-metric-value">—</div>
-          <div class="big-metric-label" id="big-metric-label">Risk-weighted total return</div>
-        </div>
-        <div class="weight-tabs" id="weight-tabs">
-          <button class="weight-tab active" data-wt="riskweighted" onclick="setWeight('riskweighted')">Risk-weighted</button>
-          <button class="weight-tab" data-wt="average" onclick="setWeight('average')">Average</button>
-          <button class="weight-tab" data-wt="compounded" onclick="setWeight('compounded')">Compounded</button>
-        </div>
-      </div>
-      <div class="chart-wrap" id="monthly-chart-wrap">
-        <canvas id="monthly-canvas"></canvas>
-        <div class="chart-tooltip" id="chart-tooltip"></div>
-      </div>
-    </div>
-
-    <!-- Stats row 1 -->
-    <div class="stats-grid" id="stats-row1"></div>
-    <!-- Stats row 2 -->
-    <div class="stats-grid" id="stats-row2"></div>
 
   </div><!-- /perf-panel -->
 
