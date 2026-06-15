@@ -769,11 +769,25 @@
       <div>
         <h2 style="font-size:20px; font-weight:800; color:#0f172a; margin-bottom:6px">Live Trade Monitor</h2>
         <p style="font-size:13px; color:#64748b; margin-bottom:4px">
-          SPY 0DTE Options Chain &nbsp;·&nbsp;
-          <span id="lt-last-refresh" style="font-weight:600;color:#2563eb">—</span>
+          SPY 0DTE Options Chain
+        </p>
+        <p style="font-size:12px; color:#2563eb; margin-bottom:0; font-weight:600">
+          Last Updated: <span id="lt-last-refresh">—</span>
         </p>
       </div>
       <button onclick="refreshLiveData()" style="background:#2563eb; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:opacity .15s">⟳ Refresh</button>
+    </div>
+
+    <!-- Legend -->
+    <div style="display:flex; gap:20px; margin-bottom:16px; font-size:12px">
+      <div style="display:flex; align-items:center; gap:8px">
+        <div style="width:16px; height:16px; background:#fef3c7; border:1px solid #fbbf24; border-radius:3px"></div>
+        <span style="color:#64748b">In-The-Money (ITM)</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px">
+        <div style="width:16px; height:16px; background:#e0f2fe; border:1px solid #0284c7; border-radius:3px"></div>
+        <span style="color:#64748b">At-The-Money (ATM)</span>
+      </div>
     </div>
 
     <!-- SPY Options Chain Table -->
@@ -2730,7 +2744,15 @@ async function refreshLiveData() {
       hour: '2-digit', minute: '2-digit', second: '2-digit'
     });
 
-    document.getElementById('lt-last-refresh').textContent = dateStr;
+    // Format timestamp more prominently
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+    const dateFormatted = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+    document.getElementById('lt-last-refresh').textContent = `${timeStr} ${dateFormatted}`;
 
     // Fetch live SPY options chain from backend API (connected to TWS)
     const resp = await fetch('/api/spy-options');
@@ -2797,21 +2819,36 @@ async function refreshLiveData() {
       const putVol = fmtInt(put.volume);
       const putOI = fmtInt(put.openInterest);
 
-      // Highlight ATM strike
-      const atm = Math.abs(strike - spyPrice) < 1 ? 'background:#e0f2fe; font-weight:600;' : '';
+      // Determine ITM/ATM status
+      const isCallITM = strike < spyPrice;  // Call is ITM if strike < spot
+      const isPutITM = strike > spyPrice;   // Put is ITM if strike > spot
+      const isATM = Math.abs(strike - spyPrice) < 1;
 
-      html += `<tr style="border-bottom:1px solid var(--card-border); ${atm}">
-        <td style="padding:6px 4px;text-align:right">${callLast}</td>
-        <td style="padding:6px 4px;text-align:right">${callBid}</td>
-        <td style="padding:6px 4px;text-align:right">${callAsk}</td>
-        <td style="padding:6px 4px;text-align:right;color:#666">${callVol}</td>
-        <td style="padding:6px 4px;text-align:right;color:#666;border-right:2px solid #ccc">${callOI}</td>
-        <td style="padding:6px 4px;text-align:center;font-weight:600;border-right:2px solid #ccc;background:#f9fafb">$${strike.toFixed(0)}</td>
-        <td style="padding:6px 4px;text-align:right">${putLast}</td>
-        <td style="padding:6px 4px;text-align:right">${putBid}</td>
-        <td style="padding:6px 4px;text-align:right">${putAsk}</td>
-        <td style="padding:6px 4px;text-align:right;color:#666">${putVol}</td>
-        <td style="padding:6px 4px;text-align:right;color:#666">${putOI}</td>
+      // Determine row background color
+      let rowBg = '';
+      if (isATM) {
+        rowBg = 'background:#e0f2fe;';  // Light blue for ATM
+      } else if (isCallITM || isPutITM) {
+        rowBg = 'background:#fef3c7;';  // Light yellow for ITM
+      }
+
+      // Highlight ITM cells
+      const callCellBg = isCallITM ? 'background:#fbbf24;' : '';
+      const putCellBg = isPutITM ? 'background:#fbbf24;' : '';
+      const strikeBg = isATM ? 'background:#0284c7; color:#fff;' : (isCallITM || isPutITM ? 'background:#f59e0b;' : 'background:#f9fafb;');
+
+      html += `<tr style="border-bottom:1px solid var(--card-border); ${rowBg}">
+        <td style="padding:6px 4px;text-align:right;${callCellBg}; font-weight:${isCallITM ? '600' : '400'}">${callLast}</td>
+        <td style="padding:6px 4px;text-align:right;${callCellBg}; font-weight:${isCallITM ? '600' : '400'}">${callBid}</td>
+        <td style="padding:6px 4px;text-align:right;${callCellBg}; font-weight:${isCallITM ? '600' : '400'}">${callAsk}</td>
+        <td style="padding:6px 4px;text-align:right;color:#666;${callCellBg}; font-weight:${isCallITM ? '600' : '400'}">${callVol}</td>
+        <td style="padding:6px 4px;text-align:right;color:#666;border-right:2px solid #ccc;${callCellBg}; font-weight:${isCallITM ? '600' : '400'}">${callOI}</td>
+        <td style="padding:6px 4px;text-align:center;font-weight:600;border-right:2px solid #ccc;${strikeBg}">$${strike.toFixed(0)}</td>
+        <td style="padding:6px 4px;text-align:right;${putCellBg}; font-weight:${isPutITM ? '600' : '400'}">${putLast}</td>
+        <td style="padding:6px 4px;text-align:right;${putCellBg}; font-weight:${isPutITM ? '600' : '400'}">${putBid}</td>
+        <td style="padding:6px 4px;text-align:right;${putCellBg}; font-weight:${isPutITM ? '600' : '400'}">${putAsk}</td>
+        <td style="padding:6px 4px;text-align:right;color:#666;${putCellBg}; font-weight:${isPutITM ? '600' : '400'}">${putVol}</td>
+        <td style="padding:6px 4px;text-align:right;color:#666;${putCellBg}; font-weight:${isPutITM ? '600' : '400'}">${putOI}</td>
       </tr>`;
     }
 
