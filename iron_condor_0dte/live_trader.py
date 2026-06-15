@@ -30,6 +30,7 @@ from .options_pricing import (
 )
 from .trade_logger import TradeLogger
 from .tradier_client import TradierClient
+from .alpaca_client import AlpacaClient
 
 log = logging.getLogger(__name__)
 ET = ZoneInfo("America/New_York")
@@ -124,10 +125,10 @@ def _create_broker(cfg: Config):
         cfg: Config object with BROKER selection and credentials
 
     Returns:
-        TradierClient or IBKRClient instance
+        TradierClient, IBKRClient, or AlpacaClient instance
 
     Raises:
-        ValueError: if BROKER is not 'tradier' or 'ibkr'
+        ValueError: if BROKER is not 'tradier', 'ibkr', or 'alpaca'
     """
     if cfg.BROKER == "ibkr":
         from .ibkr_client import IBKRClient
@@ -138,6 +139,12 @@ def _create_broker(cfg: Config):
             account_id=cfg.IBKR_ACCOUNT_ID,
             paper=cfg.IBKR_PAPER_TRADE,
         )
+    elif cfg.BROKER == "alpaca":
+        return AlpacaClient(
+            api_key=cfg.ALPACA_API_KEY or os.getenv("ALPACA_API_KEY", ""),
+            secret_key=cfg.ALPACA_SECRET_KEY or os.getenv("ALPACA_SECRET_KEY", ""),
+            paper=cfg.ALPACA_PAPER_TRADE,
+        )
     elif cfg.BROKER == "tradier":
         return TradierClient(
             token=cfg.TRADIER_TOKEN or os.getenv("TRADIER_API_TOKEN", ""),
@@ -145,7 +152,7 @@ def _create_broker(cfg: Config):
             paper=cfg.PAPER_TRADE,
         )
     else:
-        raise ValueError(f"Unknown broker: {cfg.BROKER}. Must be 'tradier' or 'ibkr'.")
+        raise ValueError(f"Unknown broker: {cfg.BROKER}. Must be 'tradier', 'ibkr', or 'alpaca'.")
 
 
 # ─── Main Trader ──────────────────────────────────────────────────────────────

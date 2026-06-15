@@ -32,11 +32,18 @@ class Config:
     IBKR_ACCOUNT_ID:   str   = os.getenv("IBKR_ACCOUNT_ID", "")
     IBKR_PAPER_TRADE:  bool  = os.getenv("IBKR_PAPER_TRADE", "true").lower() == "true"
 
+    # ── Alpaca Credentials ────────────────────────────────────────────────────
+    ALPACA_API_KEY:    str   = os.getenv("ALPACA_API_KEY", "")
+    ALPACA_SECRET_KEY: str   = os.getenv("ALPACA_SECRET_KEY", "")
+    ALPACA_PAPER_TRADE: bool = os.getenv("ALPACA_PAPER_TRADE", "true").lower() == "true"
+
     # Determine paper trading mode based on selected broker
     @property
     def PAPER_TRADE(self) -> bool:
         if self.BROKER == "ibkr":
             return self.IBKR_PAPER_TRADE
+        elif self.BROKER == "alpaca":
+            return self.ALPACA_PAPER_TRADE
         else:  # tradier
             return self.TRADIER_PAPER_TRADE
 
