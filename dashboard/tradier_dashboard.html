@@ -2149,6 +2149,8 @@ function showMainTab(tab) {
   } else if (tab === 'livetrade') {
     startLiveDataRefresh();
     stopPerformanceRefresh();
+    // Load active positions when showing Live Trade tab
+    loadActivePositions();
   } else {
     stopLiveDataRefresh();
     stopPerformanceRefresh();
