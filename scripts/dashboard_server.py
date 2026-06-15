@@ -284,29 +284,82 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 LIVE_OPTIONS_CACHE["timestamp"] = now
                 self._json(200, data)
         elif self.path == "/api/account-info":
-            # Get IBKR account info
+            # Get account info from configured broker
             try:
-                from iron_condor_0dte.ibkr_client import IBKRClient
                 from iron_condor_0dte.config import Config
+                import os
 
                 cfg = Config()
-                client = IBKRClient(
-                    host=cfg.IBKR_HOST,
-                    port=7497,
-                    client_id=101,
-                    account_id=cfg.IBKR_ACCOUNT_ID,
-                    paper=cfg.PAPER_TRADE
-                )
+                broker = os.getenv("BROKER", "tradier").lower()
 
-                profile = client.get_profile()
-                client.disconnect()
+                if broker == "alpaca":
+                    # Fetch Alpaca account info
+                    from iron_condor_0dte.alpaca_client import AlpacaClient
 
-                self._json(200, {
-                    "account": profile.get("profile", {}),
-                    "account_type": "IBKR Paper Trading",
-                    "trading_type": "Options",
-                    "timestamp": datetime.now().isoformat()
-                })
+                    client = AlpacaClient(
+                        api_key=cfg.ALPACA_API_KEY,
+                        secret_key=cfg.ALPACA_SECRET_KEY,
+                        paper=cfg.ALPACA_PAPER_TRADE
+                    )
+                    profile = client.get_profile()
+                    account_data = profile.get("profile", {})
+                    account_type = "Alpaca Paper Trading" if cfg.ALPACA_PAPER_TRADE else "Alpaca Live Trading"
+
+                    self._json(200, {
+                        "account": account_data,
+                        "account_type": account_type,
+                        "trading_type": "Options",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                elif broker == "tradier":
+                    # Fetch Tradier account info
+                    from iron_condor_0dte.tradier_client import TradierClient
+
+                    client = TradierClient(
+                        token=cfg.TRADIER_TOKEN,
+                        account_id=cfg.TRADIER_ACCOUNT_ID,
+                        paper=cfg.TRADIER_PAPER_TRADE
+                    )
+                    profile = client.get_profile()
+                    balances = client.get_balances()
+
+                    # Combine profile and balances data
+                    account_data = {
+                        **profile,
+                        "account_number": cfg.TRADIER_ACCOUNT_ID,
+                        "total_equity": float(balances.get("total_equity", 0) or 0),
+                        "cash": float(balances.get("cash_available", 0) or 0),
+                        "currency": "USD",
+                        "status": "Active",
+                        "paper_trading": cfg.TRADIER_PAPER_TRADE
+                    }
+                    account_type = "Tradier Paper Trading" if cfg.TRADIER_PAPER_TRADE else "Tradier Live Trading"
+
+                    self._json(200, {
+                        "account": account_data,
+                        "account_type": account_type,
+                        "trading_type": "Options",
+                        "timestamp": datetime.now().isoformat()
+                    })
+                else:  # IBKR default
+                    from iron_condor_0dte.ibkr_client import IBKRClient
+
+                    client = IBKRClient(
+                        host=cfg.IBKR_HOST,
+                        port=7497,
+                        client_id=101,
+                        account_id=cfg.IBKR_ACCOUNT_ID,
+                        paper=cfg.PAPER_TRADE
+                    )
+                    profile = client.get_profile()
+                    client.disconnect()
+
+                    self._json(200, {
+                        "account": profile.get("profile", {}),
+                        "account_type": "IBKR Paper Trading",
+                        "trading_type": "Options",
+                        "timestamp": datetime.now().isoformat()
+                    })
             except Exception as e:
                 self._json(200, {"error": str(e), "timestamp": datetime.now().isoformat()})
         elif self.path == "/api/historic-trades":

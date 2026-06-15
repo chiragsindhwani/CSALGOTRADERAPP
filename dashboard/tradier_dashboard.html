@@ -1320,6 +1320,29 @@ const _brokerAccounts = {
     trade_log: [],  // Populated from D.trade_log on render
     positions: []   // Populated from D.positions on render
   },
+  alpaca: {
+    name: 'Alpaca Account',
+    account_number: '',
+    type: 'Margin',
+    classification: 'Active',
+    option_level: '4',
+    status: 'Active',
+    day_trader: false,
+    date_created: '',
+    mode: 'PAPER',
+    // Alpaca metrics (fetched from API)
+    total_equity: 0,
+    cash_available: 0,
+    pnl_today: 0,
+    pnl_cumulative: 0,
+    open_premium: 0,
+    open_risk: 0,
+    win_rate: 0,
+    avg_win: 0,
+    total_pnl: 0,
+    trade_log: [],
+    positions: []
+  },
   ibkr: {
     name: 'Ruchika Dhawan',
     account_number: 'DUQ566282',
@@ -2893,32 +2916,83 @@ let performanceRefreshTimer = null;
 /** Refresh Performance tab data (account info, trades, positions) */
 async function refreshPerformanceData() {
   try {
-    // Set IBKR Paper Trading Account Details (DUQ566282)
-    const acctElements = {
-      'ac-broker': 'Interactive Brokers (IBKR)',
-      'ac-type': 'Paper Trading',
-      'ac-currency': 'USD',
-      'ac-opt-level': 'Level 3 (Spreads)',
-      'ac-status': 'Active'
-    };
-
-    Object.entries(acctElements).forEach(([id, value]) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = value;
-    });
-
-    // Fetch additional account info from API if available
+    // Fetch account info from API for current broker
     try {
       const acctResp = await fetch('/api/account-info');
       const acctData = await acctResp.json();
-      if (acctData.account) {
-        // Update with any additional info from API
-        if (acctData.account.currency) {
-          document.getElementById('ac-currency').textContent = acctData.account.currency;
+
+      if (acctData.error) {
+        console.warn('Account info error:', acctData.error);
+      } else if (acctData.account) {
+        // Update account card with broker-specific data
+        const brokerType = acctData.account_type || 'Unknown';
+
+        // Determine broker and update account details
+        if (brokerType.includes('Alpaca')) {
+          // Alpaca broker
+          const acctNum = acctData.account.account_number || acctData.account.id || '';
+          const equity = acctData.account.equity || 0;
+          const cash = acctData.account.cash || 0;
+
+          _brokerAccounts.alpaca.name = 'Alpaca Account';
+          _brokerAccounts.alpaca.account_number = acctNum;
+          _brokerAccounts.alpaca.total_equity = equity;
+          _brokerAccounts.alpaca.cash_available = cash;
+          _brokerAccounts.alpaca.mode = acctData.account.trading_status === 'PAPER' ? 'PAPER' : 'LIVE';
+
+          const acctElements = {
+            'ac-broker': 'Alpaca',
+            'ac-type': _brokerAccounts.alpaca.mode === 'PAPER' ? 'Paper Trading' : 'Live Trading',
+            'ac-currency': acctData.account.currency || 'USD',
+            'ac-opt-level': 'Level 4 (Multi-leg)',
+            'ac-status': acctData.account.status || 'Active'
+          };
+
+          Object.entries(acctElements).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+          });
+        } else if (brokerType.includes('Tradier')) {
+          // Tradier broker
+          const acctNum = acctData.account.account_number || '';
+          const equity = acctData.account.total_equity || 0;
+          const cash = acctData.account.cash || 0;
+
+          _brokerAccounts.tradier.account_number = acctNum;
+          _brokerAccounts.tradier.total_equity = equity;
+          _brokerAccounts.tradier.cash_available = cash;
+          _brokerAccounts.tradier.mode = acctData.account.paper_trading ? 'PAPER' : 'LIVE';
+
+          const acctElements = {
+            'ac-broker': 'Tradier',
+            'ac-type': _brokerAccounts.tradier.mode === 'PAPER' ? 'Paper Trading' : 'Live Trading',
+            'ac-currency': acctData.account.currency || 'USD',
+            'ac-opt-level': 'Level 5 (All Spreads)',
+            'ac-status': acctData.account.status || 'Active'
+          };
+
+          Object.entries(acctElements).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+          });
+        } else {
+          // IBKR or other brokers
+          const acctElements = {
+            'ac-broker': 'Interactive Brokers (IBKR)',
+            'ac-type': 'Paper Trading',
+            'ac-currency': 'USD',
+            'ac-opt-level': 'Level 3 (Spreads)',
+            'ac-status': 'Active'
+          };
+
+          Object.entries(acctElements).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+          });
         }
       }
     } catch (e) {
-      // Silent fail - we already have static values
+      console.warn('Account info fetch failed:', e);
     }
 
     // Fetch historic trades
