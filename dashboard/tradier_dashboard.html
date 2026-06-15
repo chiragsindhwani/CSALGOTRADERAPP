@@ -572,19 +572,25 @@
     <div class="top-row">
       <div class="account-card">
         <div class="ac-header">
-          <div class="ac-avatar" id="ac-avatar">RD</div>
+          <div class="ac-avatar" style="background:#0284c7; color:#fff; font-weight:600">IB</div>
           <div>
-            <div class="ac-name" id="ac-name">&mdash;</div>
-            <div class="ac-id"  id="ac-id">&mdash;</div>
+            <div class="ac-name" style="font-size:16px; font-weight:700; color:#0f172a">IBKR Paper Trading</div>
+            <div class="ac-id" style="font-size:18px; font-weight:700; color:#2563eb; letter-spacing:0.5px">DUQ566282</div>
           </div>
         </div>
-        <div class="ac-row"><span class="ak">Account Type</span><span class="av av-margin" id="ac-type">&mdash;</span></div>
-        <div class="ac-row"><span class="ak">Classification</span><span class="av" id="ac-class">&mdash;</span></div>
-        <div class="ac-row"><span class="ak">Options Level</span><span class="av av-level" id="ac-opt-level">&mdash;</span></div>
-        <div class="ac-row"><span class="ak">PDT Flagged</span><span class="av" id="ac-pdt-flag">&mdash;</span></div>
-        <div class="ac-row"><span class="ak">Status</span><span class="av av-active" id="ac-status">&mdash;</span></div>
-        <div class="ac-row"><span class="ak">Member Since</span><span class="av" id="ac-created">&mdash;</span></div>
-        <div class="ac-row"><span class="ak">Pending Orders</span><span class="av" id="ac-pending">&mdash;</span></div>
+        <div style="border-top: 1px solid #e2e8f0; margin: 12px 0; padding-top: 12px">
+          <div class="ac-row"><span class="ak">Broker</span><span class="av av-margin" id="ac-broker">Interactive Brokers (IBKR)</span></div>
+          <div class="ac-row"><span class="ak">Account Type</span><span class="av av-margin" id="ac-type">Paper Trading</span></div>
+          <div class="ac-row"><span class="ak">Currency</span><span class="av" id="ac-currency">USD</span></div>
+          <div class="ac-row"><span class="ak">Options Level</span><span class="av av-level" id="ac-opt-level">Level 3 (Spreads)</span></div>
+          <div class="ac-row"><span class="ak">Status</span><span class="av av-active" id="ac-status">Active</span></div>
+        </div>
+        <div style="border-top: 1px solid #e2e8f0; margin: 12px 0; padding-top: 12px">
+          <div class="ac-row"><span class="ak">Strategy</span><span class="av">SPY 0DTE Iron Condor</span></div>
+          <div class="ac-row"><span class="ak">Expiration</span><span class="av">Same-Day (0DTE)</span></div>
+          <div class="ac-row"><span class="ak">Entry Window</span><span class="av">10:15 - 10:29 AM ET</span></div>
+          <div class="ac-row"><span class="ak">Force Close</span><span class="av">3:45 PM ET</span></div>
+        </div>
       </div>
       <div class="stat-grid" id="stat-grid"></div>
 
@@ -2897,14 +2903,32 @@ let performanceRefreshTimer = null;
 /** Refresh Performance tab data (account info, trades, positions) */
 async function refreshPerformanceData() {
   try {
-    // Fetch account info
-    const acctResp = await fetch('/api/account-info');
-    const acctData = await acctResp.json();
-    if (acctData.account) {
-      document.getElementById('ac-name').textContent = acctData.account.name || 'IBKR Account';
-      document.getElementById('ac-id').textContent = acctData.account.number || '—';
-      document.getElementById('ac-type').textContent = acctData.account_type || 'Paper Trading';
-      document.getElementById('ac-status').textContent = 'Active';
+    // Set IBKR Paper Trading Account Details (DUQ566282)
+    const acctElements = {
+      'ac-broker': 'Interactive Brokers (IBKR)',
+      'ac-type': 'Paper Trading',
+      'ac-currency': 'USD',
+      'ac-opt-level': 'Level 3 (Spreads)',
+      'ac-status': 'Active'
+    };
+
+    Object.entries(acctElements).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    });
+
+    // Fetch additional account info from API if available
+    try {
+      const acctResp = await fetch('/api/account-info');
+      const acctData = await acctResp.json();
+      if (acctData.account) {
+        // Update with any additional info from API
+        if (acctData.account.currency) {
+          document.getElementById('ac-currency').textContent = acctData.account.currency;
+        }
+      }
+    } catch (e) {
+      // Silent fail - we already have static values
     }
 
     // Fetch historic trades
