@@ -53,20 +53,35 @@ class AlpacaClient(BaseBrokerClient):
     def get_quote(self, symbol: str) -> dict:
         """Fetch latest quote for a symbol.
 
+        Falls back to yfinance if Alpaca API fails.
+
         Returns:
             dict with keys: bid, ask, last
         """
         try:
-            data = self._get(f"/v2/stocks/{symbol}/latest/quote")
-            quote = data.get("quote", {})
+            # Try Alpaca API first
+            data = self._get(f"/v1/last/stocks/{symbol}")
+            last = data.get("last", {})
             return {
-                "bid": float(quote.get("bp", 0)),
-                "ask": float(quote.get("ap", 0)),
-                "last": float(quote.get("lp", 0)),
+                "bid": float(last.get("bid", 0)),
+                "ask": float(last.get("ask", 0)),
+                "last": float(last.get("price", 0)),
             }
         except Exception as e:
-            log.warning("get_quote failed for %s: %s", symbol, e)
-            return {"bid": 0, "ask": 0, "last": 0}
+            log.warning("Alpaca quote failed for %s, trying yfinance: %s", symbol, e)
+            # Fallback to yfinance
+            try:
+                import yfinance as yf
+                tick = yf.Ticker(symbol)
+                info = tick.info
+                return {
+                    "bid": float(info.get("bid", 0) or 0),
+                    "ask": float(info.get("ask", 0) or 0),
+                    "last": float(info.get("currentPrice", 0) or 0),
+                }
+            except Exception as e2:
+                log.warning("yfinance fallback also failed: %s", e2)
+                return {"bid": 0, "ask": 0, "last": 0}
 
     # ── Account ────────────────────────────────────────────────────────────────
 
