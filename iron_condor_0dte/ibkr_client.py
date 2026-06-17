@@ -338,6 +338,123 @@ class IBKRClient(BaseBrokerClient):
             log.error("place_multileg_order failed: %s", e)
             raise
 
+    def place_futures_order(
+        self,
+        symbol: str,
+        qty: int,
+        side: str,
+        order_type: str = "market",
+        limit_price: float | None = None,
+        expiry: str = "",
+    ) -> dict:
+        """Place a futures order.
+
+        Args:
+            symbol: Futures symbol (e.g., "MGC", "ES", "NQ")
+            qty: Number of contracts
+            side: "buy" or "sell"
+            order_type: "market" or "limit"
+            limit_price: Limit price (required if order_type="limit")
+            expiry: Expiry date in YYYYMM format (e.g., "202612" for Dec 2026)
+
+        Returns:
+            dict with order_id
+        """
+        try:
+            # Create futures contract with expiry
+            contract = Contract()
+            contract.symbol = symbol
+            contract.secType = "FUT"
+            contract.currency = "USD"
+
+            if symbol == "MGC":
+                contract.exchange = "COMEX"
+                # Use next quarterly expiry if not specified
+                if not expiry:
+                    from datetime import datetime
+                    now = datetime.now()
+                    month = ((now.month - 1) // 3 + 1) * 3
+                    if month <= now.month:
+                        month += 3
+                    year = now.year if month <= 12 else now.year + 1
+                    expiry = f"{year}{month:02d}"
+            else:
+                contract.exchange = "CME"
+
+            if expiry:
+                contract.lastTradeDateOrContractMonth = expiry
+
+            # Place order
+            action = "BUY" if side.lower() == "buy" else "SELL"
+            if order_type.lower() == "market":
+                order = MarketOrder(action, qty)
+            else:
+                order = LimitOrder(action, qty, limit_price)
+
+            trade = self.ib.placeOrder(contract, order)
+            self.ib.sleep(0.5)
+
+            order_id = trade.order.orderId
+            log.info(
+                "Placed futures order %s | %s %s %s (%s) @ %s",
+                order_id,
+                action,
+                qty,
+                symbol,
+                expiry,
+                order_type,
+            )
+            return {"id": order_id, "status": "submitted"}
+
+        except Exception as e:
+            log.error("place_futures_order failed: %s", e)
+            raise
+
+    def get_futures_quote(self, symbol: str, expiry: str = "") -> dict:
+        """Get futures quote.
+
+        Args:
+            symbol: Futures symbol (e.g., "MGC")
+            expiry: Expiry date in YYYYMM format (e.g., "202612")
+
+        Returns:
+            dict with bid, ask, last
+        """
+        try:
+            contract = Contract()
+            contract.symbol = symbol
+            contract.secType = "FUT"
+            contract.currency = "USD"
+
+            if symbol == "MGC":
+                contract.exchange = "COMEX"
+                # Use next quarterly expiry if not specified
+                if not expiry:
+                    from datetime import datetime
+                    now = datetime.now()
+                    month = ((now.month - 1) // 3 + 1) * 3
+                    if month <= now.month:
+                        month += 3
+                    year = now.year if month <= 12 else now.year + 1
+                    expiry = f"{year}{month:02d}"
+            else:
+                contract.exchange = "CME"
+
+            if expiry:
+                contract.lastTradeDateOrContractMonth = expiry
+
+            ticker = self.ib.reqMktData(contract)
+            self.ib.sleep(1)
+
+            return {
+                "bid": float(ticker.bid) if ticker.bid else 0,
+                "ask": float(ticker.ask) if ticker.ask else 0,
+                "last": float(ticker.last) if ticker.last else 0,
+            }
+        except Exception as e:
+            log.warning("get_futures_quote failed for %s: %s", symbol, e)
+            return {"bid": 0, "ask": 0, "last": 0}
+
     def cancel_order(self, order_id: str | int) -> dict:
         """Cancel a pending order.
 
