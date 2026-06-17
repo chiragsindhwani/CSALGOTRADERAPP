@@ -350,28 +350,47 @@ class IBKRClient(BaseBrokerClient):
         """Place a futures order.
 
         Args:
-            symbol: Futures symbol (e.g., "MGC", "ES", "NQ")
+            symbol: Futures symbol (e.g., "ES", "NQ", "CL")
             qty: Number of contracts
             side: "buy" or "sell"
             order_type: "market" or "limit"
             limit_price: Limit price (required if order_type="limit")
-            expiry: Expiry date in YYYYMM format (e.g., "202612" for Dec 2026)
+            expiry: Expiry in format: YYYYMM for MGC, or code for others
+                   ES/NQ: Z6=Dec2026, M6=June2026, U6=Sep2026, H6=March2026
 
         Returns:
             dict with order_id
         """
         try:
+            from datetime import datetime
+
             # Create futures contract with expiry
             contract = Contract()
             contract.symbol = symbol
             contract.secType = "FUT"
             contract.currency = "USD"
 
-            if symbol == "MGC":
-                contract.exchange = "COMEX"
-                # Use next quarterly expiry if not specified
+            if symbol == "ES" or symbol == "NQ":
+                contract.exchange = "CME"
+                contract.multiplier = "50" if symbol == "ES" else "20"  # ES multiplier = 50, NQ = 20
+                # ES/NQ use month codes: Z=Dec, M=June, U=Sep, H=March
                 if not expiry:
-                    from datetime import datetime
+                    now = datetime.now()
+                    # Use next available contract month
+                    # June->U6(Sep), Sep->Z6(Dec), Dec->H7(Mar), Mar->M7(June)
+                    month_codes = {
+                        1: "H", 2: "H", 3: "M",  # Jan-Mar -> Mar(H)
+                        4: "M", 5: "M", 6: "U",  # Apr-Jun -> Sep(U)
+                        7: "U", 8: "U", 9: "Z",  # Jul-Sep -> Dec(Z)
+                        10: "Z", 11: "Z", 12: "Z"  # Oct-Dec -> Dec(Z)
+                    }
+                    code = month_codes.get(now.month, "Z")
+                    year = str(now.year)[-1]  # Last digit of year
+                    expiry = f"{code}{year}"
+            elif symbol == "MGC":
+                contract.exchange = "COMEX"
+                # MGC uses YYYYMM format
+                if not expiry:
                     now = datetime.now()
                     month = ((now.month - 1) // 3 + 1) * 3
                     if month <= now.month:
@@ -414,23 +433,37 @@ class IBKRClient(BaseBrokerClient):
         """Get futures quote.
 
         Args:
-            symbol: Futures symbol (e.g., "MGC")
-            expiry: Expiry date in YYYYMM format (e.g., "202612")
+            symbol: Futures symbol (e.g., "ES", "NQ", "MGC")
+            expiry: Expiry format - YYYYMM for MGC, month codes for ES/NQ
 
         Returns:
             dict with bid, ask, last
         """
         try:
+            from datetime import datetime
+
             contract = Contract()
             contract.symbol = symbol
             contract.secType = "FUT"
             contract.currency = "USD"
 
-            if symbol == "MGC":
-                contract.exchange = "COMEX"
-                # Use next quarterly expiry if not specified
+            if symbol == "ES" or symbol == "NQ":
+                contract.exchange = "CME"
+                contract.multiplier = "50" if symbol == "ES" else "20"
                 if not expiry:
-                    from datetime import datetime
+                    now = datetime.now()
+                    month_codes = {
+                        1: "H", 2: "H", 3: "M",
+                        4: "M", 5: "M", 6: "U",
+                        7: "U", 8: "U", 9: "Z",
+                        10: "Z", 11: "Z", 12: "Z"
+                    }
+                    code = month_codes.get(now.month, "Z")
+                    year = str(now.year)[-1]
+                    expiry = f"{code}{year}"
+            elif symbol == "MGC":
+                contract.exchange = "COMEX"
+                if not expiry:
                     now = datetime.now()
                     month = ((now.month - 1) // 3 + 1) * 3
                     if month <= now.month:
