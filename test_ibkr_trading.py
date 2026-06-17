@@ -57,10 +57,10 @@ def test_connection():
             account_id=cfg.IBKR_ACCOUNT_ID,
             paper=cfg.PAPER_TRADE
         )
-        print("✓ Connected to IBKR\n")
+        print("[OK] Connected to IBKR\n")
         return client
     except Exception as e:
-        print(f"✗ Connection failed: {e}\n")
+        print(f"[FAIL] Connection failed: {e}\n")
         print("Make sure TWS is running with Paper Trading account.")
         print(f"Ensure account {cfg.IBKR_ACCOUNT_ID} is active in TWS.\n")
         raise
@@ -82,10 +82,10 @@ def test_account_info(client: IBKRClient):
                     print(f"    {k}: {v}")
             else:
                 print(f"  {key}: {value}")
-        print("✓ Account info retrieved\n")
+        print("[OK] Account info retrieved\n")
         return profile
     except Exception as e:
-        print(f"✗ Failed to get account info: {e}\n")
+        print(f"[FAIL] Failed to get account info: {e}\n")
         raise
 
 
@@ -106,38 +106,42 @@ def test_market_quotes(client: IBKRClient):
                     print(f"  {key}: ${value:.2f}")
                 else:
                     print(f"  {key}: {value}")
-        print("✓ Market quotes retrieved\n")
+        print("[OK] Market quotes retrieved\n")
     except Exception as e:
-        print(f"✗ Failed to get quotes: {e}\n")
+        print(f"[FAIL] Failed to get quotes: {e}\n")
         raise
 
 
-def test_positions_and_orders(client: IBKRClient):
-    """Test getting positions and open orders."""
+def test_options_chain(client: IBKRClient):
+    """Test getting options chain data."""
     print("=" * 80)
-    print("TEST 4: Positions & Orders")
+    print("TEST 4: SPY Options Chain")
     print("=" * 80)
 
     try:
-        positions = client.get_positions()
-        print(f"Open Positions: {len(positions)}")
-        if positions:
-            for pos in positions:
-                print(f"  {pos.get('symbol', '?')}: {pos.get('quantity', 0)} @ ${pos.get('price', 0):.2f}")
-        else:
-            print("  (none)")
+        # Get today's date for 0DTE options
+        from datetime import datetime
+        today = datetime.now().strftime("%Y%m%d")
 
-        orders = client.get_open_orders()
-        print(f"Open Orders: {len(orders)}")
-        if orders:
-            for order in orders:
-                print(f"  {order.get('order_id', '?')}: {order.get('status', '?')}")
-        else:
-            print("  (none)")
+        chain = client.get_options_chain(symbol="SPY", expiration=today)
+        print(f"SPY 0DTE Options Available: {len(chain)} contracts")
 
-        print("✓ Positions and orders retrieved\n")
+        if chain:
+            # Show first 5 options
+            for i, opt in enumerate(chain[:5]):
+                symbol = opt.get('symbol', '?')
+                bid = opt.get('bid', 0)
+                ask = opt.get('ask', 0)
+                last = opt.get('last', 0)
+                print(f"  {symbol}: bid=${bid:.2f}, ask=${ask:.2f}, last=${last:.2f}")
+            if len(chain) > 5:
+                print(f"  ... and {len(chain) - 5} more")
+        else:
+            print("  (no options available)")
+
+        print("[OK] Options chain retrieved\n")
     except Exception as e:
-        print(f"✗ Failed to get positions/orders: {e}\n")
+        print(f"[FAIL] Failed to get options chain: {e}\n")
         raise
 
 
@@ -150,8 +154,8 @@ def test_single_order(client: IBKRClient):
     print("This would place: BUY 1 SPY @ market (paper trading)")
     print("\nIn a real scenario:")
     print('  order = client.place_order("SPY", qty=1, side="buy", order_type="market")')
-    print("\n⚠ Skipped to avoid accidental execution")
-    print("✓ Single order test passed (not executed)\n")
+    print("\n[WARNING] Skipped to avoid accidental execution")
+    print("[OK] Single order test passed (not executed)\n")
 
 
 def test_multileg_order(client: IBKRClient):
@@ -175,8 +179,8 @@ def test_multileg_order(client: IBKRClient):
     print("  ]")
     print('  order = client.place_multileg_order(legs, qty=1, order_type="market")')
 
-    print("\n⚠ Skipped to avoid accidental execution")
-    print("✓ Multileg order test passed (not executed)\n")
+    print("\n[WARNING] Skipped to avoid accidental execution")
+    print("[OK] Multileg order test passed (not executed)\n")
 
 
 def test_disconnect(client: IBKRClient):
@@ -187,18 +191,18 @@ def test_disconnect(client: IBKRClient):
 
     try:
         client.disconnect()
-        print("✓ Disconnected from IBKR\n")
+        print("[OK] Disconnected from IBKR\n")
     except Exception as e:
-        print(f"✗ Disconnect failed: {e}\n")
+        print(f"[FAIL] Disconnect failed: {e}\n")
         raise
 
 
 def main():
     """Run all tests."""
     print("\n")
-    print("╔" + "═" * 78 + "╗")
-    print("║" + " IBKR Paper Trading Account - Test Suite ".center(78) + "║")
-    print("╚" + "═" * 78 + "╝")
+    print("=" * 80)
+    print(" IBKR Paper Trading Account - Test Suite ".center(80))
+    print("=" * 80)
 
     client = None
 
@@ -212,8 +216,8 @@ def main():
         # Test 3: Market quotes
         test_market_quotes(client)
 
-        # Test 4: Positions & orders
-        test_positions_and_orders(client)
+        # Test 4: Options chain
+        test_options_chain(client)
 
         # Test 5: Single order (simulated)
         test_single_order(client)
@@ -226,14 +230,14 @@ def main():
 
         # Summary
         print("=" * 80)
-        print("✓ ALL TESTS PASSED")
+        print("[OK] ALL TESTS PASSED")
         print("=" * 80)
         print("\nSummary:")
-        print("  ✓ IBKR connection successful")
-        print("  ✓ Account information retrieved")
-        print("  ✓ Market quotes working")
-        print("  ✓ Positions and orders accessible")
-        print("  ✓ Order placement methods available")
+        print("  [OK] IBKR connection successful")
+        print("  [OK] Account information retrieved")
+        print("  [OK] Market quotes working")
+        print("  [OK] SPY 0DTE options chain accessible")
+        print("  [OK] Order placement methods available")
         print("\nNext Steps:")
         print("  1. Enable automated trading: python auto_trade_live.py")
         print("  2. Monitor dashboard: http://localhost:8888/tradier_dashboard.html")
@@ -242,14 +246,14 @@ def main():
 
     except Exception as e:
         print("\n" + "=" * 80)
-        print("✗ TEST FAILED")
+        print("[FAIL] TEST FAILED")
         print("=" * 80)
         print(f"Error: {e}\n")
         print("Troubleshooting:")
         print("  1. Ensure TWS is running")
         print("  2. Check that Paper Trading is enabled")
         print("  3. Verify account DUQ566282 is active")
-        print("  4. Check TWS Settings → API → Trust Client ID")
+        print("  4. Check TWS Settings -> API -> Trust Client ID")
         print("  5. Review logs for detailed error messages")
         print("\n")
         return 1
