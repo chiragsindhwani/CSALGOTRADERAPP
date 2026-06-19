@@ -373,20 +373,15 @@ class IBKRClient(BaseBrokerClient):
             if symbol == "ES" or symbol == "NQ":
                 contract.exchange = "CME"
                 contract.multiplier = "50" if symbol == "ES" else "20"  # ES multiplier = 50, NQ = 20
-                # ES/NQ use month codes: Z=Dec, M=June, U=Sep, H=March
+                # ES/NQ: accept both YYYYMM format and month codes
                 if not expiry:
                     now = datetime.now()
-                    # Use next available contract month
-                    # June->U6(Sep), Sep->Z6(Dec), Dec->H7(Mar), Mar->M7(June)
-                    month_codes = {
-                        1: "H", 2: "H", 3: "M",  # Jan-Mar -> Mar(H)
-                        4: "M", 5: "M", 6: "U",  # Apr-Jun -> Sep(U)
-                        7: "U", 8: "U", 9: "Z",  # Jul-Sep -> Dec(Z)
-                        10: "Z", 11: "Z", 12: "Z"  # Oct-Dec -> Dec(Z)
-                    }
-                    code = month_codes.get(now.month, "Z")
-                    year = str(now.year)[-1]  # Last digit of year
-                    expiry = f"{code}{year}"
+                    # Default to next available contract month (YYYYMM format)
+                    month = ((now.month - 1) // 3 + 1) * 3
+                    if month <= now.month:
+                        month += 3
+                    year = now.year if month <= 12 else now.year + 1
+                    expiry = f"{year}{month:02d}"
             elif symbol == "MGC":
                 contract.exchange = "COMEX"
                 # MGC uses YYYYMM format
@@ -407,8 +402,10 @@ class IBKRClient(BaseBrokerClient):
             action = "BUY" if side.lower() == "buy" else "SELL"
             if order_type.lower() == "market":
                 order = MarketOrder(action, qty)
+                order.tif = "GTC"  # Good Till Cancel for after-hours trading
             else:
                 order = LimitOrder(action, qty, limit_price)
+                order.tif = "GTC"
 
             trade = self.ib.placeOrder(contract, order)
             self.ib.sleep(0.5)
@@ -452,17 +449,15 @@ class IBKRClient(BaseBrokerClient):
                 contract.multiplier = "50" if symbol == "ES" else "20"
                 if not expiry:
                     now = datetime.now()
-                    month_codes = {
-                        1: "H", 2: "H", 3: "M",
-                        4: "M", 5: "M", 6: "U",
-                        7: "U", 8: "U", 9: "Z",
-                        10: "Z", 11: "Z", 12: "Z"
-                    }
-                    code = month_codes.get(now.month, "Z")
-                    year = str(now.year)[-1]
-                    expiry = f"{code}{year}"
-            elif symbol == "MGC":
+                    # Default to next available contract month (YYYYMM format)
+                    month = ((now.month - 1) // 3 + 1) * 3
+                    if month <= now.month:
+                        month += 3
+                    year = now.year if month <= 12 else now.year + 1
+                    expiry = f"{year}{month:02d}"
+            elif symbol == "MGC" or symbol == "GC":
                 contract.exchange = "COMEX"
+                contract.multiplier = "100" if symbol == "GC" else "10"
                 if not expiry:
                     now = datetime.now()
                     month = ((now.month - 1) // 3 + 1) * 3

@@ -53,8 +53,8 @@ def buy_es_now():
         print(f"[OK] Account: {profile.get('name')}\n")
 
         # Get ES quote
-        print("[STEP 3] Fetching ES current quote...")
-        quote = client.get_futures_quote("ES")
+        print("[STEP 3] Fetching ESU26 current quote...")
+        quote = client.get_futures_quote("ES", expiry="202609")  # September 2026
         bid = quote['bid']
         ask = quote['ask']
         last = quote['last']
@@ -70,7 +70,7 @@ def buy_es_now():
 
         # Place BUY order
         print("[STEP 4] PLACING BUY ORDER...")
-        print("      Symbol: ES (E-mini S&P 500)")
+        print("      Symbol: ESU26 (E-mini S&P 500 - Sep 2026)")
         print("      Quantity: 1 contract")
         print("      Order Type: MARKET")
         print("      Action: BUY TO OPEN")
@@ -80,7 +80,8 @@ def buy_es_now():
             symbol="ES",
             qty=1,
             side="buy",
-            order_type="market"
+            order_type="market",
+            expiry="202609"  # September 2026 in YYYYMM format
         )
 
         order_id = order_result.get("id")
